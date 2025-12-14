@@ -350,15 +350,14 @@ def DrawTrail(screen,dis_range,trail_points,opts):
     center_x = screen.get_width() / 2
     center_y = screen.get_height() / 2
 
-    # Sort by time to draw path in order
-    pts = sorted(trail_points, key=lambda p: p.get("ts", 0))
+    # Trail points are already stored in time order.
     coords = []
-    for p in pts:
+    for p in trail_points:
         dis = p.get("dis", 0)
         ang = p.get("ang", 0)
         x = center_x + math.sin(ang * math.pi / 180) * dis * 100 / dis_range * conv_fact
         y = center_y - math.cos(ang * math.pi / 180) * dis * 100 / dis_range * conv_fact
-        coords.append((x, y))
+        coords.append((int(x), int(y)))
 
     # Draw points
     # for c in coords:
@@ -366,8 +365,7 @@ def DrawTrail(screen,dis_range,trail_points,opts):
 
     # Draw faint trail segments
     if len(coords) >= 2:
-        for i in range(1, len(coords)):
-            pygame.draw.line(screen, [120, 200, 255], coords[i-1], coords[i], 2)
+        pygame.draw.lines(screen, [120, 200, 255], False, coords, 2)
 
 def DrawInfoBox(screen,fonts,selected_target,opts):
     # Draw small overlay with speed and altitude near the selected radar target.

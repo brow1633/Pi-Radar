@@ -4,6 +4,7 @@ from pygame.locals import *
 import time
 import math
 import copy
+from collections import deque
 import DataFetcher
 import Classes
 import Drawer
@@ -48,6 +49,7 @@ b_key_minus_pressed = False
 TRAIL_WINDOW_SEC = 500
 TRAIL_SAMPLE_MIN_DT_SEC = 0.5
 TRAIL_MAX_POINTS = 500
+TRAIL_CLEANUP_PERIOD_SEC = 1.0
 
 
 opts = Classes.Options()
@@ -68,6 +70,8 @@ run = True
 UIElements = []
 selected_hex = None
 trails = {}
+trail_last_sample_ts = {}
+trail_last_cleanup_ts = 0.0
 
 opts = Menu.LoadOptions(path_mod,opts)
 
@@ -100,7 +104,7 @@ def SelectTargetAt(mouse_pos):
 
 def UpdateTrails(active_targets):
     """Store recent dis/ang samples for each target keyed by hex."""
-    global trails
+    global trails, trail_last_sample_ts, trail_last_cleanup_ts
     now_ts = time.time()
 
     if not active_targets:
@@ -115,15 +119,39 @@ def UpdateTrails(active_targets):
         if tgt.dis is None or tgt.ang is None:
             continue
 
-        hist = trails.setdefault(tgt.hex, [])
+        hex_id = tgt.hex
+
+        last_ts = trail_last_sample_ts.get(hex_id, 0.0)
+        if (now_ts - last_ts) < TRAIL_SAMPLE_MIN_DT_SEC:
+            continue
+
+        hist = trails.get(hex_id)
+        if hist is None:
+            # Cap points so memory/CPU stays bounded even with long windows.
+            max_points = max(2, min(TRAIL_MAX_POINTS, int(opts.trail_length_s / TRAIL_SAMPLE_MIN_DT_SEC) + 1))
+            hist = deque(maxlen=max_points)
+            trails[hex_id] = hist
+
+        # Avoid adding near-identical points (helps when data updates faster than motion).
+        if hist:
+            last = hist[-1]
+            if abs(last.get("dis", 0.0) - tgt.dis) < 0.01 and abs(last.get("ang", 0.0) - tgt.ang) < 0.1:
+                trail_last_sample_ts[hex_id] = now_ts
+                continue
 
         hist.append({"dis": tgt.dis, "ang": tgt.ang, "ts": now_ts})
+        trail_last_sample_ts[hex_id] = now_ts
 
-    cutoff = now_ts - opts.trail_length_s
-    for k in list(trails.keys()):
-        trails[k] = [p for p in trails[k] if p.get("ts", 0) >= cutoff]
-        if not trails[k]:
-            del trails[k]
+    # Cleanup old points periodically (not every frame).
+    if (now_ts - trail_last_cleanup_ts) >= TRAIL_CLEANUP_PERIOD_SEC:
+        cutoff = now_ts - opts.trail_length_s
+        for hex_id, hist in list(trails.items()):
+            while hist and hist[0].get("ts", 0) < cutoff:
+                hist.popleft()
+            if not hist:
+                trails.pop(hex_id, None)
+                trail_last_sample_ts.pop(hex_id, None)
+        trail_last_cleanup_ts = now_ts
 
 def DataProcessing():
     global raw_tgts_new
@@ -218,7 +246,7 @@ def DataDrawing():
             if selected_hex is not None:
                 selected_target = rdr_tgts.get(selected_hex)
                 if selected_target is not None:
-                    selected_trail = trails.get(selected_hex, [])
+                    selected_trail = list(trails.get(selected_hex, ()))
 
             with data_lock:
                 Drawer.Draw(opts.mode,screen,raw_tgts,rdr_tgts,opts.dis_range,sweep_angle,fonts,opts,selected_target,selected_trail)
