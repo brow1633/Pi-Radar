@@ -69,7 +69,7 @@ def fetchADSBData(homePos,url):
                 tgt.dis = round(vector[0] / 1852,3)
                 tgt.ang = round(vector[1],1)
                 if tgt.hex in dedup:
-                    if dedup[tgt.hex].time < tgt.time:
+                    if tgt.time < dedup[tgt.hex].time:
                         dedup[tgt.hex] = tgt
                 else:
                     dedup[tgt.hex] = tgt
