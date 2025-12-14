@@ -100,7 +100,11 @@ def SelectTargetAt(mouse_pos):
     nearest = None
     nearest_dist = 9999
 
+    min_alt_ft = int(getattr(opts, "min_alt_ft", 0) or 0)
+
     for tgt in rdr_tgts.values():
+        if min_alt_ft > 0 and getattr(tgt, "alt", -999) not in (None, -999) and tgt.alt < min_alt_ft:
+            continue
         dist = math.hypot(mouse_pos[0] - tgt.pos_x, mouse_pos[1] - tgt.pos_y)
         if dist < nearest_dist:
             nearest = tgt
@@ -122,8 +126,12 @@ def UpdateTrails(active_targets):
     # Accept dicts (hex -> RadarTarget) or iterables of targets.
     targets_iter = active_targets.values() if isinstance(active_targets, dict) else active_targets
 
+    min_alt_ft = int(getattr(opts, "min_alt_ft", 0) or 0)
+
     for tgt in list(targets_iter):
         if tgt is None or not getattr(tgt, "hex", None):
+            continue
+        if min_alt_ft > 0 and getattr(tgt, "alt", -999) not in (None, -999) and tgt.alt < min_alt_ft:
             continue
         if tgt.dis is None or tgt.ang is None:
             continue

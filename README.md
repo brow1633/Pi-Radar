@@ -56,6 +56,8 @@ To install, follow these steps:
 
    - LAT= and LNG= should be set to your desired radar location
 
+   - MIN_ALT_FT= sets a minimum altitude filter (in feet). Set to 0 to disable.
+
 Optional:
 
 9. Copy the radar.desktop file to `$HOME/.config/autostart/`
@@ -78,6 +80,8 @@ To run, follow these steps:
    - FEEDER_URL= must contain the path to your receiver's aircraft.json file
 
    - LAT= and LNG= should be set to your desired radar location
+
+   - MIN_ALT_FT= sets a minimum altitude filter (in feet). Set to 0 to disable.
 
 4. Run Pi-Radar by clicking on the Pi-Radar.exe
 

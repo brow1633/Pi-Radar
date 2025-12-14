@@ -185,7 +185,12 @@ def Draw(mode,screen,raw_tgts,rdr_tgts,dis_range,sweep_angle,fonts_in,opts,selec
         cy = screen.get_height() / 2
         remaining = []
 
+        min_alt_ft = int(getattr(opts, "min_alt_ft", 0) or 0)
+
         for tgt in raw_tgts:
+            # Filter low altitude targets early to reduce work.
+            if min_alt_ft > 0 and getattr(tgt, "alt", -999) not in (None, -999) and tgt.alt < min_alt_ft:
+                continue
             if tgt.dis < dis_range * 5 and (not tgt.drawn) and sweep_angle > tgt.ang and sweep_angle <= tgt.ang + 0.9:
                 rdr_tgt = Classes.RadarTarget()
                 rdr_tgt.pos_x = cx + math.sin(tgt.ang * math.pi / 180) * tgt.dis * 100 / dis_range * conv_fact
@@ -264,6 +269,8 @@ def AnalogDraw1(screen,rdr_tgts,dis_range,sweep_angle):
     
     #Handle Radar Targets
     for rdr_tgt in rdr_tgts.values():
+        if getattr(opt, "min_alt_ft", 0) and getattr(rdr_tgt, "alt", -999) not in (None, -999) and rdr_tgt.alt < opt.min_alt_ft:
+            continue
         if rdr_tgt.age < 10:
             col = [round(20 * rdr_tgt.fade / 1000,0) + 37, round(190 * rdr_tgt.fade / 1000,0) + 37, round(20 * rdr_tgt.fade / 1000,0) + 37]
             sta_pos_x = rdr_tgt.pos_x + math.cos(rdr_tgt.ang * math.pi / 180) * 4 * rdr_tgt.sze / 2
@@ -288,6 +295,8 @@ def AnalogDraw2(screen,rdr_tgts,dis_range,sweep_angle):
        
     #Handle Radar Targets
     for rdr_tgt in rdr_tgts.values():
+        if getattr(opt, "min_alt_ft", 0) and getattr(rdr_tgt, "alt", -999) not in (None, -999) and rdr_tgt.alt < opt.min_alt_ft:
+            continue
         if rdr_tgt.age < 10:
             col = [round(20 * rdr_tgt.fade / 1000,0) + 37, round(190 * rdr_tgt.fade / 1000,0) + 37, round(20 * rdr_tgt.fade / 1000,0) + 37]
             sta_pos_x = rdr_tgt.pos_x + math.cos(rdr_tgt.ang * math.pi / 180) * 4 * rdr_tgt.sze / 2
@@ -321,6 +330,8 @@ def AnalogDraw3(screen,rdr_tgts,dis_range,sweep_angle):
     
     #Handle Radar Targets
     for rdr_tgt in rdr_tgts.values():
+        if getattr(opt, "min_alt_ft", 0) and getattr(rdr_tgt, "alt", -999) not in (None, -999) and rdr_tgt.alt < opt.min_alt_ft:
+            continue
         if rdr_tgt.age < 10:
             col = [round(20 * rdr_tgt.fade / 1000,0) + 37, round(190 * rdr_tgt.fade / 1000,0) + 37, round(20 * rdr_tgt.fade / 1000,0) + 37]
             pygame.draw.circle(screen,color=col,center=[rdr_tgt.pos_x, rdr_tgt.pos_y], radius=7)
@@ -353,6 +364,8 @@ def DigitalDraw(screen,rdr_tgts,dis_range,sweep_angle):
     
     #Handle Radar Targets
     for rdr_tgt in rdr_tgts.values():  
+        if getattr(opt, "min_alt_ft", 0) and getattr(rdr_tgt, "alt", -999) not in (None, -999) and rdr_tgt.alt < opt.min_alt_ft:
+            continue
         #Draw new targets behind sweep bar      
         if rdr_tgt.age < 10:
             col = [255, 255, 255]

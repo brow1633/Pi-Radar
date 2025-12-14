@@ -102,6 +102,9 @@ def LoadOptions(path_mod,opts):
                         if "TRAIL_LENGTH_S" in line:
                             opts.trail_length_s = int(line.split("=")[1].strip())
 
+                        if "MIN_ALT_FT" in line:
+                            opts.min_alt_ft = int(line.split("=")[1].strip())
+
                 opts.config_ok = True
 
         except Exception as err:
@@ -152,6 +155,12 @@ def SaveOptions(path_mod,opts):
 
                         if "RANGE_IN_KM=" in lines[i]:
                             lines[i] = "RANGE_IN_KM=" + str(opts.metric) + "\n"
+
+                        if "MIN_ALT_FT=" in lines[i]:
+                            lines[i] = "MIN_ALT_FT=" + str(getattr(opts, "min_alt_ft", 0)) + "\n"
+
+                if not any(l.strip().startswith("MIN_ALT_FT=") for l in lines):
+                    lines.append("MIN_ALT_FT=" + str(getattr(opts, "min_alt_ft", 0)) + "\n")
                 f.seek(0)
                 f.truncate(0)
                 f.writelines(lines)
