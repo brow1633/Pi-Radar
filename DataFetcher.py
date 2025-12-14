@@ -17,6 +17,7 @@ def fetchADSBData(homePos,url):
         if "aircraft" in str(aircraft_data).split(":[")[0]:
             var_name = "aircraft"
 
+        dedup = {}
         for a in aircraft_data[var_name]:
             timestmp = aircraft_data.get("now")
 
@@ -67,10 +68,14 @@ def fetchADSBData(homePos,url):
                 vector = AngleCalc(homePos,tgt.alt,tgt.lat,tgt.lng)
                 tgt.dis = round(vector[0] / 1852,3)
                 tgt.ang = round(vector[1],1)
-                tgts.append(tgt)
+                if tgt.hex in dedup:
+                    if dedup[tgt.hex].time < tgt.time:
+                        dedup[tgt.hex] = tgt
+                else:
+                    dedup[tgt.hex] = tgt
            
 
-        return tgts
+        return list(dedup.values())
     except Exception as error:
         print("Data Download Error: ", error)
         return None
