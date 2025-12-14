@@ -85,12 +85,18 @@ def LoadOptions(path_mod,opts):
                             opts.homePos.lng = float(line.split("=")[1].strip())
                         if "RANGE=" in line:
                             zoom = int(line.split("=")[1].strip())
-                            if zoom == 2:
-                                opts.dis_range = 10
+                            if zoom == 0:
+                                opts.dis_range = 1
+                            elif zoom == 1:
+                                opts.dis_range = 2
+                            elif zoom == 2:
+                                opts.dis_range = 3
                             elif zoom == 3:
-                                opts.dis_range = 20
+                                opts.dis_range = 4
                             elif zoom == 4:
-                                opts.dis_range = 40
+                                opts.dis_range = 5
+                            elif zoom == 5:
+                                opts.dis_range = 10
                             else:
                                 opts.dis_range = 5
                         if "DEBUG=" in line:
@@ -139,12 +145,18 @@ def SaveOptions(path_mod,opts):
 
                         if "RANGE=" in lines[i]:
                             zoom = 1
-                            if opts.dis_range == 10:
+                            if opts.dis_range == 1:
+                                zoom = 0
+                            elif opts.dis_range == 2:
+                                zoom = 1
+                            elif opts.dis_range == 3:
                                 zoom = 2
-                            elif opts.dis_range == 20:
+                            elif opts.dis_range == 4:
                                 zoom = 3
-                            elif opts.dis_range == 40:
-                                zoom = 4                        
+                            elif opts.dis_range == 5:
+                                zoom = 4
+                            elif opts.dis_range == 10:
+                                zoom = 5
                             lines[i] = "RANGE=" + str(zoom) + "\n"
 
                         if "DEBUG=" in lines[i]:

@@ -76,6 +76,10 @@ trail_last_cleanup_ts = 0.0
 
 runways_index = Runways.RunwaysIndex()
 
+# Range per ring (total radius is dis_range * 5).
+# Totals: 5, 10, 15, 20, 25, 50
+RANGE_STEPS = [1, 2, 3, 4, 5, 10]
+
 opts = Menu.LoadOptions(path_mod,opts)
 
 # Start background runways download/load at startup.
@@ -229,15 +233,19 @@ def DataDrawing():
                                             opts.mode -= 1
                                             rdr_tgts.clear()
                                     if UIElement.tag == "RNG_UP":
-                                        if opts.dis_range <= 20:
-                                            opts.dis_range = opts.dis_range * 2
-                                            if opts.mode == 3:
-                                                rdr_tgts.clear()
+                                        if opts.dis_range in RANGE_STEPS:
+                                            i = RANGE_STEPS.index(opts.dis_range)
+                                            if i < (len(RANGE_STEPS) - 1):
+                                                opts.dis_range = RANGE_STEPS[i + 1]
+                                                if opts.mode == 3:
+                                                    rdr_tgts.clear()
                                     if UIElement.tag == "RNG_DN":
-                                        if opts.dis_range >= 10:
-                                            opts.dis_range = int(round(opts.dis_range / 2,0))
-                                            if opts.mode == 3:
-                                                rdr_tgts.clear()
+                                        if opts.dis_range in RANGE_STEPS:
+                                            i = RANGE_STEPS.index(opts.dis_range)
+                                            if i > 0:
+                                                opts.dis_range = RANGE_STEPS[i - 1]
+                                                if opts.mode == 3:
+                                                    rdr_tgts.clear()
                                     if UIElement.tag == "OPTIONS":
                                         menu_level = 1
                                 elif menu_level == 1:
@@ -278,18 +286,22 @@ def DataDrawing():
                 Drawer.DrawUI(screen,fonts,UIElement)
 
         keys = pygame.key.get_pressed()
-        if keys[pygame.K_PLUS] and opts.dis_range <= 20:
+        if keys[pygame.K_PLUS] and opts.dis_range in RANGE_STEPS:
             if not b_key_plus_pressed:
-                opts.dis_range = opts.dis_range * 2
+                i = RANGE_STEPS.index(opts.dis_range)
+                if i < (len(RANGE_STEPS) - 1):
+                    opts.dis_range = RANGE_STEPS[i + 1]
                 b_key_plus_pressed = True
                 if opts.mode == 3:
                     rdr_tgts.clear()
         else:
             b_key_plus_pressed = False
         
-        if keys[pygame.K_MINUS] and opts.dis_range >= 10:
+        if keys[pygame.K_MINUS] and opts.dis_range in RANGE_STEPS:
             if not b_key_minus_pressed:
-                opts.dis_range = int(round(opts.dis_range / 2,0))
+                i = RANGE_STEPS.index(opts.dis_range)
+                if i > 0:
+                    opts.dis_range = RANGE_STEPS[i - 1]
                 b_key_minus_pressed = True
                 if opts.mode == 3:
                     rdr_tgts.clear()
