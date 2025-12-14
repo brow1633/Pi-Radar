@@ -99,6 +99,8 @@ def LoadOptions(path_mod,opts):
                             opts.grid = line.split("=")[1].lower().strip() == "true"
                         if "RANGE_IN_KM=" in line:
                             opts.metric = line.split("=")[1].lower().strip() == "true"
+                        if "TRAIL_LENGTH_S" in line:
+                            opts.trail_length_s = int(line.split("=")[1].strip())
 
                 opts.config_ok = True
 

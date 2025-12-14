@@ -45,9 +45,9 @@ sweep_angle = 270
 b_key_plus_pressed = False
 b_key_minus_pressed = False
 
-TRAIL_WINDOW_SEC = 60
+TRAIL_WINDOW_SEC = 500
 TRAIL_SAMPLE_MIN_DT_SEC = 0.5
-TRAIL_MAX_POINTS = 300
+TRAIL_MAX_POINTS = 500
 
 
 opts = Classes.Options()
@@ -117,15 +117,9 @@ def UpdateTrails(active_targets):
 
         hist = trails.setdefault(tgt.hex, [])
 
-        # Light sampling to avoid 40fps * N targets growth.
-        if hist and (now_ts - hist[-1].get("ts", 0)) < TRAIL_SAMPLE_MIN_DT_SEC:
-            continue
-
         hist.append({"dis": tgt.dis, "ang": tgt.ang, "ts": now_ts})
-        if len(hist) > TRAIL_MAX_POINTS:
-            trails[tgt.hex] = hist[-TRAIL_MAX_POINTS:]
 
-    cutoff = now_ts - TRAIL_WINDOW_SEC
+    cutoff = now_ts - opts.trail_length_s
     for k in list(trails.keys()):
         trails[k] = [p for p in trails[k] if p.get("ts", 0) >= cutoff]
         if not trails[k]:

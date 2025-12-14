@@ -45,6 +45,7 @@ class Options:
     mode = 0
     homePos = HomePosition()
     dis_range = 10
+    trail_length_s = 500
     url = ""
     vers = ""
     source = ""
