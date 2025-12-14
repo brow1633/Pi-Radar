@@ -13,6 +13,7 @@ class Aircraft:
     dis = -999
     ang = -999
     cat = "X0"
+    type = ""
     time = 0
     drawn = False
 
@@ -22,9 +23,14 @@ class RadarTarget:
     fade = 1000
     trk = 0
     spd = 0
+    alt = -999
     age = 0
     cls = ""
     sze = 0     #Size 1 - xs, 2 - s, 3 - m, 4 - l, 5 - xl
+    pos_x = 0
+    pos_y = 0
+    type = ""
+    hex = ""
 
 class HomePosition:
     lat = 0

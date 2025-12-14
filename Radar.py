@@ -3,6 +3,7 @@ from pygame import gfxdraw
 from pygame.locals import *
 import time
 import math
+import copy
 import DataFetcher
 import Classes
 import Drawer
@@ -27,7 +28,7 @@ if os.name == 'nt':
     font3 = pygame.font.SysFont('ocrastdopentype', 25)
 elif os.name == 'posix' or os.name != 'nt':
     path_mod = os.path.join(os.path.join(os.path.expanduser('~')), '.config') + "/pi-radar/"
-    pygame.mouse.set_visible(False)
+    # pygame.mouse.set_visible(False)
     font1 = pygame.font.SysFont('quicksand', 15)
     font2 = pygame.font.SysFont('quicksand', 20)
     font3 = pygame.font.SysFont('quicksand', 25)
@@ -44,11 +45,16 @@ sweep_angle = 270
 b_key_plus_pressed = False
 b_key_minus_pressed = False
 
+TRAIL_WINDOW_SEC = 60
+TRAIL_SAMPLE_MIN_DT_SEC = 0.5
+TRAIL_MAX_POINTS = 300
+
 
 opts = Classes.Options()
 opts.vers = version
 
-rdr_tgts = []
+rdr_tgts = {}
+data_lock = threading.Lock()
 raw_tgts = []
 raw_tgts_new = []
 
@@ -60,6 +66,8 @@ menu_level = 0
 
 run = True
 UIElements = []
+selected_hex = None
+trails = {}
 
 opts = Menu.LoadOptions(path_mod,opts)
 
@@ -74,13 +82,64 @@ def Stop():
     global run
     run = False
 
+def SelectTargetAt(mouse_pos):
+    """Return the closest radar target to the click position within pick radius."""
+    nearest = None
+    nearest_dist = 9999
+
+    for tgt in rdr_tgts.values():
+        dist = math.hypot(mouse_pos[0] - tgt.pos_x, mouse_pos[1] - tgt.pos_y)
+        if dist < nearest_dist:
+            nearest = tgt
+            nearest_dist = dist
+
+    if nearest is not None and nearest_dist <= 25:
+        return copy.copy(nearest)
+
+    return None
+
+def UpdateTrails(active_targets):
+    """Store recent dis/ang samples for each target keyed by hex."""
+    global trails
+    now_ts = time.time()
+
+    if not active_targets:
+        return
+
+    # Accept dicts (hex -> RadarTarget) or iterables of targets.
+    targets_iter = active_targets.values() if isinstance(active_targets, dict) else active_targets
+
+    for tgt in list(targets_iter):
+        if tgt is None or not getattr(tgt, "hex", None):
+            continue
+        if tgt.dis is None or tgt.ang is None:
+            continue
+
+        hist = trails.setdefault(tgt.hex, [])
+
+        # Light sampling to avoid 40fps * N targets growth.
+        if hist and (now_ts - hist[-1].get("ts", 0)) < TRAIL_SAMPLE_MIN_DT_SEC:
+            continue
+
+        hist.append({"dis": tgt.dis, "ang": tgt.ang, "ts": now_ts})
+        if len(hist) > TRAIL_MAX_POINTS:
+            trails[tgt.hex] = hist[-TRAIL_MAX_POINTS:]
+
+    cutoff = now_ts - TRAIL_WINDOW_SEC
+    for k in list(trails.keys()):
+        trails[k] = [p for p in trails[k] if p.get("ts", 0) >= cutoff]
+        if not trails[k]:
+            del trails[k]
+
 def DataProcessing():
     global raw_tgts_new
     global opts
     global dwnl_stats
     
     if opts.config_ok:
-        raw_tgts_new = DataFetcher.fetchADSBData(opts.homePos,opts.url)
+        raw_tgts_tmp = DataFetcher.fetchADSBData(opts.homePos,opts.url)
+        with data_lock:
+            raw_tgts_new = raw_tgts_tmp
         dwnl_stats[0] += 1
         if raw_tgts_new is None:
             dwnl_stats[1] += 1
@@ -89,15 +148,86 @@ def DataDrawing():
     global raw_tgts, raw_tgts_new
     global run, screen, sweep_angle, menu_modes
     global fps, opts
-    global UIElements
+    global UIElements, selected_hex, trails
 
     while run:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 run = False
+            elif (event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.FINGERDOWN) and not mouse_down[0]:
+                mouse_down[0] = True
+                mousePos = pygame.mouse.get_pos()
+
+                if not menu_modes[0]:
+                    hit = SelectTargetAt(mousePos)
+                    if hit is not None:
+                        selected_hex = hit.hex
+                    else:
+                        if selected_hex is not None:
+                            selected_hex = None
+                        else:
+                            menu_modes[0] = True
+                            menu_level = 0
+                else:
+                    for UIElement in UIElements:
+                        if isinstance(UIElement, Classes.Button):
+                            if UIElement.rect.collidepoint(mousePos):
+                                if UIElement.tag =="RETURN":
+                                    if menu_level > 0:
+                                        menu_level -= 1
+                                    else:
+                                        menu_modes[0] = False
+                                        selected_hex = None
+                                if menu_level == 0:
+                                    if UIElement.tag == "EXIT":
+                                        run = False
+                                    if UIElement.tag == "MODE_UP":
+                                        if opts.mode < 3:
+                                            opts.mode += 1
+                                            rdr_tgts.clear()
+                                    if UIElement.tag == "MODE_DN":
+                                        if opts.mode > 0:
+                                            opts.mode -= 1
+                                            rdr_tgts.clear()
+                                    if UIElement.tag == "RNG_UP":
+                                        if opts.dis_range <= 20:
+                                            opts.dis_range = opts.dis_range * 2
+                                            if opts.mode == 3:
+                                                rdr_tgts.clear()
+                                    if UIElement.tag == "RNG_DN":
+                                        if opts.dis_range >= 10:
+                                            opts.dis_range = int(round(opts.dis_range / 2,0))
+                                            if opts.mode == 3:
+                                                rdr_tgts.clear()
+                                    if UIElement.tag == "OPTIONS":
+                                        menu_level = 1
+                                elif menu_level == 1:
+                                    if "DEBUG" in UIElement.tag:
+                                       opts.debug = UIElement.tag.split("_")[1] == "True"
+
+                                    if "GRID" in UIElement.tag:
+                                        opts.grid = UIElement.tag.split("_")[1] == "True"
+
+                                    if "METRIC" in UIElement.tag:
+                                        opts.metric = UIElement.tag.split("_")[1] == "True"
+
+                                    if "SAVE" in UIElement.tag:
+                                        Menu.SaveOptions(path_mod,opts)            
+
+            elif event.type == pygame.MOUSEBUTTONUP or event.type == pygame.FINGERUP:
+                mouse_down[0] = False
 
         if opts.config_ok:
-            Drawer.Draw(opts.mode,screen,raw_tgts,rdr_tgts,opts.dis_range,sweep_angle,fonts,opts)
+            UpdateTrails(rdr_tgts)
+            selected_trail = []
+            selected_target = None
+            if selected_hex is not None:
+                selected_target = rdr_tgts.get(selected_hex)
+                if selected_target is not None:
+                    selected_trail = trails.get(selected_hex, [])
+
+            with data_lock:
+                Drawer.Draw(opts.mode,screen,raw_tgts,rdr_tgts,opts.dis_range,sweep_angle,fonts,opts,selected_target,selected_trail)
             if opts.debug:
                 Drawer.DrawDebugInfo(screen,fonts,opts.mode,fps,dwnl_stats)
         else:
@@ -134,8 +264,9 @@ def DataDrawing():
                 t3.start()
         
         if sweep_angle > 359:
-            raw_tgts = raw_tgts_new
-            raw_tgts_new = None
+            with data_lock:
+                raw_tgts = raw_tgts_new
+                raw_tgts_new = None
             sweep_angle = 0
             t2 = threading.Thread(target=task1)
             t2.start()
@@ -143,64 +274,6 @@ def DataDrawing():
         pygame.display.flip()
         dt = clock.tick(40) / 1000
         fps = round(clock.get_fps(),0)
-
-        
-        if (event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.FINGERDOWN) and not mouse_down[0]:              
-            mouse_down[0] = True            
-
-
-            mousePos = pygame.mouse.get_pos()
-
-            if not menu_modes[0]:
-                menu_modes[0] = True
-                menu_level = 0
-            else:
-                for UIElement in UIElements:
-                    if isinstance(UIElement, Classes.Button):
-                        if UIElement.rect.collidepoint(mousePos):
-                            if UIElement.tag =="RETURN":
-                                if menu_level > 0:
-                                    menu_level -= 1
-                                else:
-                                    menu_modes[0] = False                        
-                            if menu_level == 0:
-                                if UIElement.tag == "EXIT":
-                                    run = False
-                                if UIElement.tag == "MODE_UP":
-                                    if opts.mode < 3:
-                                        opts.mode += 1
-                                        rdr_tgts.clear()
-                                if UIElement.tag == "MODE_DN":
-                                    if opts.mode > 0:
-                                        opts.mode -= 1
-                                        rdr_tgts.clear()
-                                if UIElement.tag == "RNG_UP":
-                                    if opts.dis_range <= 20:
-                                        opts.dis_range = opts.dis_range * 2
-                                        if opts.mode == 3:
-                                            rdr_tgts.clear()
-                                if UIElement.tag == "RNG_DN":
-                                    if opts.dis_range >= 10:
-                                        opts.dis_range = int(round(opts.dis_range / 2,0))
-                                        if opts.mode == 3:
-                                            rdr_tgts.clear()
-                                if UIElement.tag == "OPTIONS":
-                                    menu_level = 1
-                            elif menu_level == 1:
-                                if "DEBUG" in UIElement.tag:
-                                   opts.debug = UIElement.tag.split("_")[1] == "True"
-
-                                if "GRID" in UIElement.tag:
-                                    opts.grid = UIElement.tag.split("_")[1] == "True"
-
-                                if "METRIC" in UIElement.tag:
-                                    opts.metric = UIElement.tag.split("_")[1] == "True"
-
-                                if "SAVE" in UIElement.tag:
-                                    Menu.SaveOptions(path_mod,opts)            
-
-        if event.type == pygame.MOUSEBUTTONUP or event.type == pygame.FINGERUP:
-            mouse_down[0] = False
 
 def task1():
     DataProcessing()

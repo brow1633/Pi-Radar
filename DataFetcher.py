@@ -31,6 +31,7 @@ def fetchADSBData(homePos,url):
             tgt.spd = a.get("gs")
             tgt.trk = a.get("track")
             tgt.cat = a.get("category")
+            tgt.type = a.get("t")
 
             seen_pos = a.get("seen_pos")
 

@@ -7,7 +7,7 @@ opt = [False,False,False]
 
 fonts = []
 
-def Draw(mode,screen,raw_tgts,rdr_tgts,dis_range,sweep_angle,fonts_in,opts):
+def Draw(mode,screen,raw_tgts,rdr_tgts,dis_range,sweep_angle,fonts_in,opts,selected_target=None,selected_trail=None):
     global opt
     global fonts
 
@@ -29,7 +29,7 @@ def Draw(mode,screen,raw_tgts,rdr_tgts,dis_range,sweep_angle,fonts_in,opts):
         conv_fact = 1.852
 
     if raw_tgts is not None:
-        for tgt in raw_tgts:
+        for tgt in list(raw_tgts):
             if tgt.dis < dis_range * 5:
                 if not tgt.drawn and sweep_angle > tgt.ang and sweep_angle <= tgt.ang + 0.9:
                     rdr_tgt = Classes.RadarTarget()
@@ -37,9 +37,13 @@ def Draw(mode,screen,raw_tgts,rdr_tgts,dis_range,sweep_angle,fonts_in,opts):
                     rdr_tgt.pos_y = screen.get_height() / 2 - math.cos(tgt.ang * math.pi / 180) * tgt.dis * 100 / dis_range * conv_fact
                     rdr_tgt.trk = tgt.trk
                     rdr_tgt.ang = tgt.ang
+                    rdr_tgt.dis = tgt.dis
                     rdr_tgt.spd = tgt.spd
+                    rdr_tgt.alt = tgt.alt
                     rdr_tgt.age = tgt.time
                     rdr_tgt.cls = tgt.flt
+                    rdr_tgt.type = tgt.type
+                    rdr_tgt.hex = tgt.hex
 
                     sze = 2
                     if tgt.cat == "A1":
@@ -54,7 +58,7 @@ def Draw(mode,screen,raw_tgts,rdr_tgts,dis_range,sweep_angle,fonts_in,opts):
                         sze = 5
                     rdr_tgt.sze = sze
 
-                    rdr_tgts.append(rdr_tgt)
+                    rdr_tgts[rdr_tgt.hex] = rdr_tgt
                     raw_tgts.remove(tgt)
 
     if mode == 0:
@@ -65,6 +69,11 @@ def Draw(mode,screen,raw_tgts,rdr_tgts,dis_range,sweep_angle,fonts_in,opts):
         AnalogDraw3(screen,rdr_tgts,dis_range,sweep_angle)
     elif mode == 3:
         DigitalDraw(screen,rdr_tgts,dis_range,sweep_angle)
+
+    if selected_target is not None:
+        if selected_trail:
+            DrawTrail(screen,dis_range,selected_trail,opts)
+        DrawInfoBox(screen,fonts,selected_target,opts)
 
 
 def AnalogDraw1(screen,rdr_tgts,dis_range,sweep_angle):
@@ -93,7 +102,7 @@ def AnalogDraw1(screen,rdr_tgts,dis_range,sweep_angle):
             pygame.draw.arc(screen, col_scan, rect,ang, ang + 1 * math.pi / 180, 1)
     
     #Handle Radar Targets
-    for rdr_tgt in rdr_tgts:
+    for rdr_tgt in rdr_tgts.values():
         if rdr_tgt.age < 10:
             col = [round(20 * rdr_tgt.fade / 1000,0) + 37, round(190 * rdr_tgt.fade / 1000,0) + 37, round(20 * rdr_tgt.fade / 1000,0) + 37]
             sta_pos_x = rdr_tgt.pos_x + math.cos(rdr_tgt.ang * math.pi / 180) * 4 * rdr_tgt.sze / 2
@@ -103,9 +112,10 @@ def AnalogDraw1(screen,rdr_tgts,dis_range,sweep_angle):
             pygame.draw.line(screen,color=col,start_pos=[sta_pos_x, sta_pos_y],end_pos=[end_pos_x, end_pos_y], width=rdr_tgt.sze)
 
         rdr_tgt.fade = rdr_tgt.fade * 0.98
-        if rdr_tgt.fade < 10:
-            rdr_tgts.remove(rdr_tgt)  
 
+    to_delete = [tgt.hex for tgt in rdr_tgts.values() if tgt.fade < 10]
+    for id in to_delete:
+        del rdr_tgts[id]
     
     #Draw Center Circle
     pygame.draw.circle(screen,color=col_mark,center=[screen.get_width() / 2, screen.get_height() / 2], radius=3)
@@ -116,7 +126,7 @@ def AnalogDraw2(screen,rdr_tgts,dis_range,sweep_angle):
     col_mark = [205,205,205]
        
     #Handle Radar Targets
-    for rdr_tgt in rdr_tgts:
+    for rdr_tgt in rdr_tgts.values():
         if rdr_tgt.age < 10:
             col = [round(20 * rdr_tgt.fade / 1000,0) + 37, round(190 * rdr_tgt.fade / 1000,0) + 37, round(20 * rdr_tgt.fade / 1000,0) + 37]
             sta_pos_x = rdr_tgt.pos_x + math.cos(rdr_tgt.ang * math.pi / 180) * 4 * rdr_tgt.sze / 2
@@ -126,8 +136,10 @@ def AnalogDraw2(screen,rdr_tgts,dis_range,sweep_angle):
             pygame.draw.line(screen,color=col,start_pos=[sta_pos_x, sta_pos_y],end_pos=[end_pos_x, end_pos_y], width=rdr_tgt.sze)
 
         rdr_tgt.fade = rdr_tgt.fade * 0.998
-        if rdr_tgt.fade < 10:
-            rdr_tgts.remove(rdr_tgt)  
+
+    to_delete = [tgt.hex for tgt in rdr_tgts.values() if tgt.fade < 10]
+    for id in to_delete:
+        del rdr_tgts[id]
 
     #Draw Scan Bar
     for i in range (0,20):
@@ -147,14 +159,16 @@ def AnalogDraw3(screen,rdr_tgts,dis_range,sweep_angle):
     col_mark = [205,205,205]
     
     #Handle Radar Targets
-    for rdr_tgt in rdr_tgts:
+    for rdr_tgt in rdr_tgts.values():
         if rdr_tgt.age < 10:
             col = [round(20 * rdr_tgt.fade / 1000,0) + 37, round(190 * rdr_tgt.fade / 1000,0) + 37, round(20 * rdr_tgt.fade / 1000,0) + 37]
             pygame.draw.circle(screen,color=col,center=[rdr_tgt.pos_x, rdr_tgt.pos_y], radius=7)
         
         rdr_tgt.fade = rdr_tgt.fade * 0.998
-        if rdr_tgt.fade < 10:
-            rdr_tgts.remove(rdr_tgt)
+
+    to_delete = [tgt.hex for tgt in rdr_tgts.values() if tgt.fade < 10]
+    for id in to_delete:
+        del rdr_tgts[id]
 
     #Draw Scan Bar
     for i in range (0,20):
@@ -177,7 +191,7 @@ def DigitalDraw(screen,rdr_tgts,dis_range,sweep_angle):
     DrawMarkings(screen,fonts,col_mark,dis_range)
     
     #Handle Radar Targets
-    for rdr_tgt in rdr_tgts:  
+    for rdr_tgt in rdr_tgts.values():  
         #Draw new targets behind sweep bar      
         if rdr_tgt.age < 10:
             col = [255, 255, 255]
@@ -193,9 +207,9 @@ def DigitalDraw(screen,rdr_tgts,dis_range,sweep_angle):
                     label_offset_y = 10
                 screen.blit(img, (rdr_tgt.pos_x - 20, rdr_tgt.pos_y + label_offset_y))
 
-        #Remove old targets ahead of sweep bar
-        if sweep_angle > rdr_tgt.ang - 1 and sweep_angle < rdr_tgt.ang:
-            rdr_tgts.remove(rdr_tgt) 
+    to_delete = [tgt.hex for tgt in rdr_tgts.values() if (sweep_angle > tgt.ang - 1 and sweep_angle < tgt.ang)]
+    for id in to_delete:
+        del rdr_tgts[id]
 
     #Draw Scan Bar
     line_x = screen.get_width() / 2 + math.sin(sweep_angle * math.pi / 180) * 500
@@ -323,3 +337,83 @@ def DrawRectangle(screen,rectanle):
     s.fill(rectanle.col)
     s.set_alpha(rectanle.alpha)
     screen.blit(s,rectanle.pos)
+
+def DrawTrail(screen,dis_range,trail_points,opts):
+    # Draw recent path for the selected target.
+    if dis_range <= 0 or not trail_points:
+        return
+
+    conv_fact = 1
+    if opts.metric:
+        conv_fact = 1.852
+
+    center_x = screen.get_width() / 2
+    center_y = screen.get_height() / 2
+
+    # Sort by time to draw path in order
+    pts = sorted(trail_points, key=lambda p: p.get("ts", 0))
+    coords = []
+    for p in pts:
+        dis = p.get("dis", 0)
+        ang = p.get("ang", 0)
+        x = center_x + math.sin(ang * math.pi / 180) * dis * 100 / dis_range * conv_fact
+        y = center_y - math.cos(ang * math.pi / 180) * dis * 100 / dis_range * conv_fact
+        coords.append((x, y))
+
+    # Draw points
+    # for c in coords:
+        # pygame.draw.circle(screen, [120, 200, 255], (int(c[0]), int(c[1])), 3)
+
+    # Draw faint trail segments
+    if len(coords) >= 2:
+        for i in range(1, len(coords)):
+            pygame.draw.line(screen, [120, 200, 255], coords[i-1], coords[i], 2)
+
+def DrawInfoBox(screen,fonts,selected_target,opts):
+    # Draw small overlay with speed and altitude near the selected radar target.
+    box_w = 170
+    box_h = 88
+    offset_x = 20
+    offset_y = -80
+
+    box_alpha = 185
+
+    box_x = selected_target.pos_x + offset_x
+    box_y = selected_target.pos_y + offset_y
+
+    # Keep the box inside the screen bounds
+    box_x = max(10, min(box_x, screen.get_width() - box_w - 10))
+    box_y = max(10, min(box_y, screen.get_height() - box_h - 10))
+
+    rect = pygame.Rect(box_x, box_y, box_w, box_h)
+
+    bg = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+    bg.fill((15, 15, 15, box_alpha))
+    screen.blit(bg, (box_x, box_y))
+    pygame.draw.rect(screen, [200,200,200], rect, width=1)
+
+    callsign = selected_target.cls if selected_target.cls else "N/A"
+    alt_val = selected_target.alt if selected_target.alt is not None else -999
+    spd_val = selected_target.spd if selected_target.spd is not None else -999
+    type_val = selected_target.type
+
+    alt_str = "ALT: N/A"
+    spd_str = "SPD: N/A"
+    type_str = "TYPE: N/A"
+
+    if alt_val != -999:
+        alt_str = "ALT: " + str(int(alt_val)) + " ft"
+    if spd_val != -999:
+        spd_str = "SPD: " + str(int(spd_val)) + " kt"
+    if type_val != "":
+        type_str = "TYPE: " + str(type_val)
+
+    img_callsign = fonts[1].render(callsign, True, [255,255,255])
+    img_alt = fonts[0].render(alt_str, True, [200,200,200])
+    img_spd = fonts[0].render(spd_str, True, [200,200,200])
+    img_type = fonts[0].render(type_str, True, [200,200,200])
+
+    screen.blit(img_callsign, (box_x + 10, box_y + 8))
+    screen.blit(img_alt, (box_x + 10, box_y + 32))
+    screen.blit(img_spd, (box_x + 10, box_y + 50))
+    screen.blit(img_type, (box_x + 10, box_y + 68))
