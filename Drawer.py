@@ -3,11 +3,105 @@ from pygame import gfxdraw
 import Classes
 import math
 
+
+_RUNWAYS_OVERLAY_CACHE_KEY = None
+_RUNWAYS_OVERLAY_CACHE_SURFACE = None
+
+
+def _polar_to_screen(screen, dis_nm: float, ang_deg: float, dis_range: float, conv_fact: float):
+    cx = screen.get_width() / 2
+    cy = screen.get_height() / 2
+    x = cx + math.sin(ang_deg * math.pi / 180) * dis_nm * 100 / dis_range * conv_fact
+    y = cy - math.cos(ang_deg * math.pi / 180) * dis_nm * 100 / dis_range * conv_fact
+    return x, y
+
+
+def _build_runways_overlay_surface(screen, dis_range, opts, runways):
+    # Fast overlay: colorkey surface (no per-pixel alpha) cached and blitted each frame.
+    # This is significantly cheaper than blending a full-screen SRCALPHA surface.
+    overlay = pygame.Surface(screen.get_size()).convert()
+    key = (1, 2, 3)
+    overlay.fill(key)
+    overlay.set_colorkey(key)
+
+    fill_rgb = (60, 60, 60)
+    edge_rgb = (120, 120, 120)
+
+    conv_fact = 1
+    if opts.metric:
+        conv_fact = 1.852
+
+    # 1 ft -> NM
+    ft_to_nm = 0.3048 / 1852.0
+
+    for rw in runways:
+        x1, y1 = _polar_to_screen(screen, rw.le_dis_nm, rw.le_ang_deg, dis_range, conv_fact)
+        x2, y2 = _polar_to_screen(screen, rw.he_dis_nm, rw.he_ang_deg, dis_range, conv_fact)
+
+        dx = x2 - x1
+        dy = y2 - y1
+        seg_len = math.hypot(dx, dy)
+        if seg_len < 1:
+            continue
+
+        width_nm = max(0.0, float(rw.width_ft) * ft_to_nm)
+        half_w_px = (width_nm * 100 / dis_range * conv_fact) / 2.0
+        if half_w_px < 1.0:
+            half_w_px = 1.0
+
+        # Perpendicular unit vector.
+        px = -dy / seg_len
+        py = dx / seg_len
+
+        p1 = (int(x1 + px * half_w_px), int(y1 + py * half_w_px))
+        p2 = (int(x1 - px * half_w_px), int(y1 - py * half_w_px))
+        p3 = (int(x2 - px * half_w_px), int(y2 - py * half_w_px))
+        p4 = (int(x2 + px * half_w_px), int(y2 + py * half_w_px))
+
+        pts = [p1, p2, p3, p4]
+        pygame.draw.polygon(overlay, fill_rgb, pts)
+        pygame.draw.polygon(overlay, edge_rgb, pts, width=1)
+
+    return overlay
+
+
+def DrawRunwaysOverlay(screen, dis_range, opts, runways_index=None):
+    global _RUNWAYS_OVERLAY_CACHE_KEY, _RUNWAYS_OVERLAY_CACHE_SURFACE
+
+    if runways_index is None or not getattr(runways_index, "ready", False):
+        _RUNWAYS_OVERLAY_CACHE_KEY = None
+        _RUNWAYS_OVERLAY_CACHE_SURFACE = None
+        return
+
+    # Match existing visible radius behavior (targets use dis_range * 5).
+    visible_nm = dis_range * 5
+    runways = runways_index.query_by_max_distance_nm(visible_nm)
+    if not runways:
+        _RUNWAYS_OVERLAY_CACHE_KEY = None
+        _RUNWAYS_OVERLAY_CACHE_SURFACE = None
+        return
+
+    cache_key = (
+        screen.get_width(),
+        screen.get_height(),
+        float(dis_range),
+        bool(getattr(opts, "metric", False)),
+        float(visible_nm),
+        int(getattr(runways_index, "version", 0)),
+        int(len(runways)),
+    )
+
+    if _RUNWAYS_OVERLAY_CACHE_KEY != cache_key or _RUNWAYS_OVERLAY_CACHE_SURFACE is None:
+        _RUNWAYS_OVERLAY_CACHE_SURFACE = _build_runways_overlay_surface(screen, dis_range, opts, runways)
+        _RUNWAYS_OVERLAY_CACHE_KEY = cache_key
+
+    screen.blit(_RUNWAYS_OVERLAY_CACHE_SURFACE, (0, 0))
+
 opt = [False,False,False]
 
 fonts = []
 
-def Draw(mode,screen,raw_tgts,rdr_tgts,dis_range,sweep_angle,fonts_in,opts,selected_target=None,selected_trail=None):
+def Draw(mode,screen,raw_tgts,rdr_tgts,dis_range,sweep_angle,fonts_in,opts,selected_target=None,selected_trail=None,runways_index=None):
     global opt
     global fonts
 
@@ -60,6 +154,9 @@ def Draw(mode,screen,raw_tgts,rdr_tgts,dis_range,sweep_angle,fonts_in,opts,selec
 
                     rdr_tgts[rdr_tgt.hex] = rdr_tgt
                     raw_tgts.remove(tgt)
+
+    # Draw runways underneath the sweep/aircraft (cached for performance).
+    DrawRunwaysOverlay(screen, dis_range, opts, runways_index)
 
     if mode == 0:
         AnalogDraw1(screen,rdr_tgts,dis_range,sweep_angle)

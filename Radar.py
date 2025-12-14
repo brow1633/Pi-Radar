@@ -11,6 +11,7 @@ import Drawer
 import Menu
 import threading
 import os
+import Runways
 
 version = "0.2.0"
 
@@ -73,7 +74,15 @@ trails = {}
 trail_last_sample_ts = {}
 trail_last_cleanup_ts = 0.0
 
+runways_index = Runways.RunwaysIndex()
+
 opts = Menu.LoadOptions(path_mod,opts)
+
+# Start background runways download/load at startup.
+if opts.config_ok:
+    Runways.start_background_load(runways_index, path_mod, opts.homePos)
+else:
+    threading.Thread(target=lambda: Runways.ensure_runways_csv(path_mod), daemon=True).start()
 
 #Use airplanes.live API if no url has been defined
 if len(opts.url) < 2:
@@ -249,7 +258,7 @@ def DataDrawing():
                     selected_trail = list(trails.get(selected_hex, ()))
 
             with data_lock:
-                Drawer.Draw(opts.mode,screen,raw_tgts,rdr_tgts,opts.dis_range,sweep_angle,fonts,opts,selected_target,selected_trail)
+                Drawer.Draw(opts.mode,screen,raw_tgts,rdr_tgts,opts.dis_range,sweep_angle,fonts,opts,selected_target,selected_trail,runways_index)
             if opts.debug:
                 Drawer.DrawDebugInfo(screen,fonts,opts.mode,fps,dwnl_stats)
         else:

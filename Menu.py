@@ -90,7 +90,7 @@ def LoadOptions(path_mod,opts):
                             elif zoom == 3:
                                 opts.dis_range = 20
                             elif zoom == 4:
-                                opts.dis_range == 40
+                                opts.dis_range = 40
                             else:
                                 opts.dis_range = 5
                         if "DEBUG=" in line:
