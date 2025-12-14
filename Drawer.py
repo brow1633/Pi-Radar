@@ -7,6 +7,65 @@ import math
 _RUNWAYS_OVERLAY_CACHE_KEY = None
 _RUNWAYS_OVERLAY_CACHE_SURFACE = None
 
+_MARKINGS_CACHE_KEY = None
+_MARKINGS_CACHE_SURFACE = None
+
+_GRID_CACHE_KEY = None
+_GRID_CACHE_SURFACE = None
+
+_INFOBOX_BG_CACHE = {}
+
+_TEXT_CACHE = {}
+_TEXT_CACHE_MAX = 512
+
+
+def _render_text_cached(font, text: str, antialias: bool, color):
+    key = (id(font), text, bool(antialias), tuple(color))
+    img = _TEXT_CACHE.get(key)
+    if img is None:
+        if len(_TEXT_CACHE) >= _TEXT_CACHE_MAX:
+            _TEXT_CACHE.clear()
+        img = font.render(text, antialias, color)
+        _TEXT_CACHE[key] = img
+    return img
+
+
+def _get_grid_overlay_surface(screen, grid_space: int, color_rgb):
+    global _GRID_CACHE_KEY, _GRID_CACHE_SURFACE
+
+    w = screen.get_width()
+    h = screen.get_height()
+    cache_key = (w, h, int(grid_space), tuple(color_rgb))
+
+    if _GRID_CACHE_KEY != cache_key or _GRID_CACHE_SURFACE is None:
+        s = pygame.Surface((w, h)).convert()
+        key = (1, 2, 3)
+        s.fill(key)
+        s.set_colorkey(key)
+
+        cx = w / 2
+        cy = h / 2
+        for i in range(-7, 7):
+            y = cy + grid_space * i + 1
+            x = cx + grid_space * i + 1
+            pygame.draw.line(s, color=color_rgb, start_pos=[0, y], end_pos=[w, y], width=1)
+            pygame.draw.line(s, color=color_rgb, start_pos=[x, 0], end_pos=[x, h], width=1)
+
+        _GRID_CACHE_SURFACE = s
+        _GRID_CACHE_KEY = cache_key
+
+    return _GRID_CACHE_SURFACE
+
+
+def _get_infobox_bg_surface(box_w: int, box_h: int, box_alpha: int):
+    key = (int(box_w), int(box_h), int(box_alpha))
+    s = _INFOBOX_BG_CACHE.get(key)
+    if s is None:
+        s = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+        s.fill((15, 15, 15, box_alpha))
+        _INFOBOX_BG_CACHE[key] = s
+    return s
+
 
 def _polar_to_screen(screen, dis_nm: float, ang_deg: float, dis_range: float, conv_fact: float):
     cx = screen.get_width() / 2
@@ -113,9 +172,8 @@ def Draw(mode,screen,raw_tgts,rdr_tgts,dis_range,sweep_angle,fonts_in,opts,selec
     #Draw Grid Lines
     grid_space = 100
     if opts.grid:
-        for i in range (-7,7):
-            pygame.draw.line(screen,color=[50,50,50],start_pos=[0,screen.get_height() / 2 + grid_space * i + 1],end_pos=[screen.get_width(),screen.get_height() / 2 + grid_space * i + 1],width=1)
-            pygame.draw.line(screen,color=[50,50,50],start_pos=[screen.get_width() / 2 + grid_space * i + 1,0],end_pos=[screen.get_width() / 2 + grid_space * i + 1,screen.get_height()],width=1)
+        grid = _get_grid_overlay_surface(screen, grid_space, [50, 50, 50])
+        screen.blit(grid, (0, 0))
 
     conv_fact = 1
     
@@ -123,37 +181,43 @@ def Draw(mode,screen,raw_tgts,rdr_tgts,dis_range,sweep_angle,fonts_in,opts,selec
         conv_fact = 1.852
 
     if raw_tgts is not None:
-        for tgt in list(raw_tgts):
-            if tgt.dis < dis_range * 5:
-                if not tgt.drawn and sweep_angle > tgt.ang and sweep_angle <= tgt.ang + 0.9:
-                    rdr_tgt = Classes.RadarTarget()
-                    rdr_tgt.pos_x = screen.get_width() / 2 + math.sin(tgt.ang * math.pi / 180) * tgt.dis * 100 / dis_range * conv_fact
-                    rdr_tgt.pos_y = screen.get_height() / 2 - math.cos(tgt.ang * math.pi / 180) * tgt.dis * 100 / dis_range * conv_fact
-                    rdr_tgt.trk = tgt.trk
-                    rdr_tgt.ang = tgt.ang
-                    rdr_tgt.dis = tgt.dis
-                    rdr_tgt.spd = tgt.spd
-                    rdr_tgt.alt = tgt.alt
-                    rdr_tgt.age = tgt.time
-                    rdr_tgt.cls = tgt.flt
-                    rdr_tgt.type = tgt.type
-                    rdr_tgt.hex = tgt.hex
+        cx = screen.get_width() / 2
+        cy = screen.get_height() / 2
+        remaining = []
 
+        for tgt in raw_tgts:
+            if tgt.dis < dis_range * 5 and (not tgt.drawn) and sweep_angle > tgt.ang and sweep_angle <= tgt.ang + 0.9:
+                rdr_tgt = Classes.RadarTarget()
+                rdr_tgt.pos_x = cx + math.sin(tgt.ang * math.pi / 180) * tgt.dis * 100 / dis_range * conv_fact
+                rdr_tgt.pos_y = cy - math.cos(tgt.ang * math.pi / 180) * tgt.dis * 100 / dis_range * conv_fact
+                rdr_tgt.trk = tgt.trk
+                rdr_tgt.ang = tgt.ang
+                rdr_tgt.dis = tgt.dis
+                rdr_tgt.spd = tgt.spd
+                rdr_tgt.alt = tgt.alt
+                rdr_tgt.age = tgt.time
+                rdr_tgt.cls = tgt.flt
+                rdr_tgt.type = tgt.type
+                rdr_tgt.hex = tgt.hex
+
+                sze = 2
+                if tgt.cat == "A1":
                     sze = 2
-                    if tgt.cat == "A1":
-                        sze = 2
-                    elif tgt.cat == "A2":
-                        sze = 3
-                    if tgt.cat == "A3":
-                        sze = 4
-                    if tgt.cat == "A4":
-                        sze = 4
-                    if tgt.cat == "A5":
-                        sze = 5
-                    rdr_tgt.sze = sze
+                elif tgt.cat == "A2":
+                    sze = 3
+                if tgt.cat == "A3":
+                    sze = 4
+                if tgt.cat == "A4":
+                    sze = 4
+                if tgt.cat == "A5":
+                    sze = 5
+                rdr_tgt.sze = sze
 
-                    rdr_tgts[rdr_tgt.hex] = rdr_tgt
-                    raw_tgts.remove(tgt)
+                rdr_tgts[rdr_tgt.hex] = rdr_tgt
+            else:
+                remaining.append(tgt)
+
+        raw_tgts[:] = remaining
 
     # Draw runways underneath the sweep/aircraft (cached for performance).
     DrawRunwaysOverlay(screen, dis_range, opts, runways_index)
@@ -298,7 +362,7 @@ def DigitalDraw(screen,rdr_tgts,dis_range,sweep_angle):
                 line_x = rdr_tgt.pos_x + math.sin(rdr_tgt.trk * math.pi / 180) *  rdr_tgt.spd * 100 / dis_range / 60 / 3
                 line_y = rdr_tgt.pos_y - math.cos(rdr_tgt.trk * math.pi / 180) *  rdr_tgt.spd * 100 / dis_range / 60 / 3
                 pygame.draw.line(screen,col,[rdr_tgt.pos_x, rdr_tgt.pos_y],[line_x, line_y], True)
-                img = fonts[0].render(rdr_tgt.cls, True, [175,175,175])
+                img = _render_text_cached(fonts[0], rdr_tgt.cls, True, [175,175,175])
                 label_offset_y = -20
                 if rdr_tgt.trk >= 270 or rdr_tgt.trk <= 90:
                     label_offset_y = 10
@@ -316,79 +380,93 @@ def DigitalDraw(screen,rdr_tgts,dis_range,sweep_angle):
 
 def DrawMarkings(screen,fonts,col_mark,dis_range):
     global opt
-    
-    #Draw range circles
-    for i in range(1,6):
-        gfxdraw.aacircle(screen,int(screen.get_width() / 2), int(screen.get_height() / 2), 100 * i,col_mark)
+    global _MARKINGS_CACHE_KEY, _MARKINGS_CACHE_SURFACE
 
-        range_unit = "NM"
+    w = screen.get_width()
+    h = screen.get_height()
+    cache_key = (w, h, int(dis_range), bool(opt.metric), tuple(col_mark), id(fonts[1]))
 
-        if opt.metric:
-            range_unit ="KM"
+    if _MARKINGS_CACHE_KEY != cache_key or _MARKINGS_CACHE_SURFACE is None:
+        s = pygame.Surface((w, h)).convert()
+        key = (1, 2, 3)
+        s.fill(key)
+        s.set_colorkey(key)
 
-        img = fonts[1].render(str(i * dis_range) + range_unit, True, col_mark)
-        screen.blit(img, (screen.get_width() / 2 - 20, screen.get_height() / 2 + 100 * i + 10))
-    
-    #Draw Indexes
-    for i in range(0,16):
-        angle = i * 22.5
-        len = 0
-        
-        if angle == 0 or angle == 90 or angle == 270:
-            len  = 20
-        elif angle == 45 or angle == 135 or angle == 225 or angle == 315:
-            len = 15
-        else:
-            for j in range (1,17):
-                if angle == 22.5*j:
-                    len = 5
-                    continue
+        cx = w / 2
+        cy = h / 2
 
-        if len > 0:
-            line_pos1_x = screen.get_width() / 2 + math.sin(angle * math.pi / 180) * (screen.get_width() / 2 - 39)
-            line_pos1_y = screen.get_height() / 2 - math.cos(angle * math.pi / 180) * (screen.get_height() / 2 - 39)
-            line_pos2_x = screen.get_width() / 2 + math.sin(angle * math.pi / 180) * (screen.get_width() / 2 - 39 + len)
-            line_pos2_y = screen.get_height() / 2 - math.cos(angle * math.pi / 180) * (screen.get_height() / 2 - 39 + len)
-            pygame.draw.line(screen,color=col_mark,start_pos=[line_pos1_x, line_pos1_y],end_pos=[line_pos2_x, line_pos2_y], width=2)
-    
-    for i in range (0,4):
-        angle = i * 90
-        line_pos1_x = screen.get_width() / 2 + math.sin(angle * math.pi / 180) * (5) 
-        line_pos1_y = screen.get_height() / 2 - math.cos(angle * math.pi / 180) * (5)
-        line_pos2_x = screen.get_width() / 2 + math.sin(angle * math.pi / 180) * (10)
-        line_pos2_y = screen.get_height() / 2 - math.cos(angle * math.pi / 180) * (10)
-        pygame.draw.line(screen,color=col_mark,start_pos=[line_pos1_x, line_pos1_y],end_pos=[line_pos2_x, line_pos2_y], width=2)
+        # Draw range circles + labels
+        range_unit = "KM" if opt.metric else "NM"
+        for i in range(1, 6):
+            gfxdraw.aacircle(s, int(cx), int(cy), 100 * i, col_mark)
+            img = _render_text_cached(fonts[1], str(i * dis_range) + range_unit, True, col_mark)
+            s.blit(img, (cx - 20, cy + 100 * i + 10))
 
-    # Draw 90° - Text Markings
-    img = fonts[1].render("360", True, col_mark)
-    img = pygame.transform.rotate(img,0)
-    screen.blit(img, (screen.get_width() / 2 - img.get_width() / 2 + 2, 45))
+        # Draw indexes
+        for i in range(0, 16):
+            angle = i * 22.5
+            tick_len = 0
 
-    img = fonts[1].render("090", True, col_mark)
-    img = pygame.transform.rotate(img,270)
-    screen.blit(img, (screen.get_width() - 67, screen.get_height() / 2 - img.get_height() / 2 + 2))
+            if angle == 0 or angle == 90 or angle == 270:
+                tick_len = 20
+            elif angle == 45 or angle == 135 or angle == 225 or angle == 315:
+                tick_len = 15
+            else:
+                for j in range(1, 17):
+                    if angle == 22.5 * j:
+                        tick_len = 5
+                        continue
 
-    img = fonts[1].render("180", True, col_mark)
-    img = pygame.transform.rotate(img,180)
-    screen.blit(img, (screen.get_width() / 2 - img.get_width() / 2 + 2, screen.get_height() - 67))
+            if tick_len > 0:
+                line_pos1_x = cx + math.sin(angle * math.pi / 180) * (cx - 39)
+                line_pos1_y = cy - math.cos(angle * math.pi / 180) * (cy - 39)
+                line_pos2_x = cx + math.sin(angle * math.pi / 180) * (cx - 39 + tick_len)
+                line_pos2_y = cy - math.cos(angle * math.pi / 180) * (cy - 39 + tick_len)
+                pygame.draw.line(s, color=col_mark, start_pos=[line_pos1_x, line_pos1_y], end_pos=[line_pos2_x, line_pos2_y], width=2)
 
-    img = fonts[1].render("270", True, col_mark)
-    img = pygame.transform.rotate(img,90)
-    screen.blit(img, (45, screen.get_height() / 2 - img.get_height() / 2 + 2))
+        for i in range(0, 4):
+            angle = i * 90
+            line_pos1_x = cx + math.sin(angle * math.pi / 180) * 5
+            line_pos1_y = cy - math.cos(angle * math.pi / 180) * 5
+            line_pos2_x = cx + math.sin(angle * math.pi / 180) * 10
+            line_pos2_y = cy - math.cos(angle * math.pi / 180) * 10
+            pygame.draw.line(s, color=col_mark, start_pos=[line_pos1_x, line_pos1_y], end_pos=[line_pos2_x, line_pos2_y], width=2)
+
+        # Draw 90° text markings
+        img = _render_text_cached(fonts[1], "360", True, col_mark)
+        img = pygame.transform.rotate(img, 0)
+        s.blit(img, (cx - img.get_width() / 2 + 2, 45))
+
+        img = _render_text_cached(fonts[1], "090", True, col_mark)
+        img = pygame.transform.rotate(img, 270)
+        s.blit(img, (w - 67, cy - img.get_height() / 2 + 2))
+
+        img = _render_text_cached(fonts[1], "180", True, col_mark)
+        img = pygame.transform.rotate(img, 180)
+        s.blit(img, (cx - img.get_width() / 2 + 2, h - 67))
+
+        img = _render_text_cached(fonts[1], "270", True, col_mark)
+        img = pygame.transform.rotate(img, 90)
+        s.blit(img, (45, cy - img.get_height() / 2 + 2))
+
+        _MARKINGS_CACHE_SURFACE = s
+        _MARKINGS_CACHE_KEY = cache_key
+
+    screen.blit(_MARKINGS_CACHE_SURFACE, (0, 0))
 
 
 def DrawDebugInfo(screen,fonts,mode,fps,dwnl_stats):
-    img = fonts[1].render("Mode:  " + str(mode), True, [250,250,250])
+    img = _render_text_cached(fonts[1], "Mode:  " + str(mode), True, [250,250,250])
     screen.blit(img, (200,200))
-    img = fonts[1].render("Rate:   " + str(fps) + "fps", True, [250,250,250])
+    img = _render_text_cached(fonts[1], "Rate:   " + str(fps) + "fps", True, [250,250,250])
     screen.blit(img, (200,225))
-    img = fonts[1].render("D/E/%:  " + str(dwnl_stats[0]) + " / " + str(dwnl_stats[1]) + " / " + str(round(dwnl_stats[1] / dwnl_stats[0] * 100,1)) + "%", True, [250,250,250])
+    img = _render_text_cached(fonts[1], "D/E/%:  " + str(dwnl_stats[0]) + " / " + str(dwnl_stats[1]) + " / " + str(round(dwnl_stats[1] / dwnl_stats[0] * 100,1)) + "%", True, [250,250,250])
     screen.blit(img, (200,250))
 
 def DrawConfigError(screen,fonts):
-    img = fonts[1].render("ERROR IN radar.cfg File", True, [255, 0, 0])
+    img = _render_text_cached(fonts[1], "ERROR IN radar.cfg File", True, [255, 0, 0])
     screen.blit(img, (screen.get_width() / 2 - 100, screen.get_height() / 2))
-    img = fonts[1].render("Please check configuration!", True, [255, 255, 255])
+    img = _render_text_cached(fonts[1], "Please check configuration!", True, [255, 255, 255])
     screen.blit(img, (screen.get_width() / 2 - 115, screen.get_height() / 2 + 25))
 
 def DrawUI(screen,fonts,UIElement):
@@ -482,8 +560,7 @@ def DrawInfoBox(screen,fonts,selected_target,opts):
 
     rect = pygame.Rect(box_x, box_y, box_w, box_h)
 
-    bg = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
-    bg.fill((15, 15, 15, box_alpha))
+    bg = _get_infobox_bg_surface(box_w, box_h, box_alpha)
     screen.blit(bg, (box_x, box_y))
     pygame.draw.rect(screen, [200,200,200], rect, width=1)
 
@@ -503,10 +580,10 @@ def DrawInfoBox(screen,fonts,selected_target,opts):
     if type_val != "":
         type_str = "TYPE: " + str(type_val)
 
-    img_callsign = fonts[1].render(callsign, True, [255,255,255])
-    img_alt = fonts[0].render(alt_str, True, [200,200,200])
-    img_spd = fonts[0].render(spd_str, True, [200,200,200])
-    img_type = fonts[0].render(type_str, True, [200,200,200])
+    img_callsign = _render_text_cached(fonts[1], callsign, True, [255,255,255])
+    img_alt = _render_text_cached(fonts[0], alt_str, True, [200,200,200])
+    img_spd = _render_text_cached(fonts[0], spd_str, True, [200,200,200])
+    img_type = _render_text_cached(fonts[0], type_str, True, [200,200,200])
 
     screen.blit(img_callsign, (box_x + 10, box_y + 8))
     screen.blit(img_alt, (box_x + 10, box_y + 32))
