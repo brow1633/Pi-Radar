@@ -83,7 +83,7 @@ def _build_runways_overlay_surface(screen, dis_range, opts, runways):
     overlay.fill(key)
     overlay.set_colorkey(key)
 
-    fill_rgb = (60, 60, 60)
+    fill_rgb = (245, 225, 137)
     edge_rgb = (120, 120, 120)
 
     conv_fact = 1
@@ -167,7 +167,8 @@ def Draw(mode,screen,raw_tgts,rdr_tgts,dis_range,sweep_angle,fonts_in,opts,selec
     fonts = fonts_in
     opt = opts
     
-    col_back = [37,37,37]
+    #col_back = [37,37,37]
+    col_back = [21,20,46]
     screen.fill(col_back)
     #Draw Grid Lines
     grid_space = 100
@@ -368,14 +369,14 @@ def DigitalDraw(screen,rdr_tgts,dis_range,sweep_angle):
             continue
         #Draw new targets behind sweep bar      
         if rdr_tgt.age < 10:
-            col = [255, 255, 255]
+            col = [97, 118, 237]
             pygame.draw.circle(screen,color=col,center=[rdr_tgt.pos_x, rdr_tgt.pos_y], radius=3)
             
             if rdr_tgt.spd > 0:
                 line_x = rdr_tgt.pos_x + math.sin(rdr_tgt.trk * math.pi / 180) *  rdr_tgt.spd * 100 / dis_range / 60 / 3
                 line_y = rdr_tgt.pos_y - math.cos(rdr_tgt.trk * math.pi / 180) *  rdr_tgt.spd * 100 / dis_range / 60 / 3
                 pygame.draw.line(screen,col,[rdr_tgt.pos_x, rdr_tgt.pos_y],[line_x, line_y], True)
-                img = _render_text_cached(fonts[0], rdr_tgt.cls, True, [175,175,175])
+                img = _render_text_cached(fonts[0], rdr_tgt.cls, True, col)
                 label_offset_y = -20
                 if rdr_tgt.trk >= 270 or rdr_tgt.trk <= 90:
                     label_offset_y = 10
@@ -388,7 +389,7 @@ def DigitalDraw(screen,rdr_tgts,dis_range,sweep_angle):
     #Draw Scan Bar
     line_x = screen.get_width() / 2 + math.sin(sweep_angle * math.pi / 180) * 500
     line_y = screen.get_height() / 2 - math.cos(sweep_angle * math.pi / 180) * 500
-    pygame.draw.line(screen,color=[50, 205, 50],start_pos=[screen.get_width() / 2, screen.get_height() / 2],end_pos=[line_x, line_y], width=2)
+    pygame.draw.line(screen,color=[97,237,174],start_pos=[screen.get_width() / 2, screen.get_height() / 2],end_pos=[line_x, line_y], width=2)
 
 
 def DrawMarkings(screen,fonts,col_mark,dis_range):
