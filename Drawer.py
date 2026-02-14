@@ -209,6 +209,8 @@ def Draw(mode,screen,raw_tgts,rdr_tgts,dis_range,sweep_angle,fonts_in,opts,selec
         for tgt in raw_tgts:
             # Filter low altitude targets early to reduce work.
             if min_alt_ft > 0 and getattr(tgt, "alt", -999) not in (None, -999) and tgt.alt < min_alt_ft:
+                # Remove any existing contact immediately when it falls below altitude filter.
+                rdr_tgts.pop(getattr(tgt, "hex", None), None)
                 continue
 
             in_visible_range = tgt.dis < dis_range * 5
