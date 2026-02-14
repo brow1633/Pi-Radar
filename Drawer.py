@@ -2,6 +2,7 @@ import pygame
 from pygame import gfxdraw
 import Classes
 import math
+import time
 
 
 _RUNWAYS_OVERLAY_CACHE_KEY = None
@@ -17,6 +18,23 @@ _INFOBOX_BG_CACHE = {}
 
 _TEXT_CACHE = {}
 _TEXT_CACHE_MAX = 512
+
+TARGET_STALE_SEC = 60
+
+
+def _target_is_fresh(rdr_tgt, now_ts=None):
+    """Return True when a target has been updated recently enough to draw."""
+    if now_ts is None:
+        now_ts = time.time()
+
+    last_seen_ts = getattr(rdr_tgt, "last_seen_ts", None)
+    if last_seen_ts is not None:
+        return (now_ts - last_seen_ts) <= TARGET_STALE_SEC
+
+    age = getattr(rdr_tgt, "age", None)
+    if age in (None, -999):
+        return True
+    return age <= TARGET_STALE_SEC
 
 
 def _render_text_cached(font, text: str, antialias: bool, color):
@@ -192,7 +210,13 @@ def Draw(mode,screen,raw_tgts,rdr_tgts,dis_range,sweep_angle,fonts_in,opts,selec
             # Filter low altitude targets early to reduce work.
             if min_alt_ft > 0 and getattr(tgt, "alt", -999) not in (None, -999) and tgt.alt < min_alt_ft:
                 continue
-            if tgt.dis < dis_range * 5 and (not tgt.drawn) and sweep_angle > tgt.ang and sweep_angle <= tgt.ang + 0.9:
+
+            in_visible_range = tgt.dis < dis_range * 5
+            if not in_visible_range:
+                rdr_tgts.pop(getattr(tgt, "hex", None), None)
+                continue
+
+            if (not tgt.drawn) and sweep_angle > tgt.ang and sweep_angle <= tgt.ang + 0.9:
                 rdr_tgt = Classes.RadarTarget()
                 rdr_tgt.pos_x = cx + math.sin(tgt.ang * math.pi / 180) * tgt.dis * 100 / dis_range * conv_fact
                 rdr_tgt.pos_y = cy - math.cos(tgt.ang * math.pi / 180) * tgt.dis * 100 / dis_range * conv_fact
@@ -205,6 +229,7 @@ def Draw(mode,screen,raw_tgts,rdr_tgts,dis_range,sweep_angle,fonts_in,opts,selec
                 rdr_tgt.cls = tgt.flt
                 rdr_tgt.type = tgt.type
                 rdr_tgt.hex = tgt.hex
+                rdr_tgt.last_seen_ts = time.time()
 
                 sze = 2
                 if tgt.cat == "A1":
@@ -269,10 +294,11 @@ def AnalogDraw1(screen,rdr_tgts,dis_range,sweep_angle):
             pygame.draw.arc(screen, col_scan, rect,ang, ang + 1 * math.pi / 180, 1)
     
     #Handle Radar Targets
+    now_ts = time.time()
     for rdr_tgt in rdr_tgts.values():
         if getattr(opt, "min_alt_ft", 0) and getattr(rdr_tgt, "alt", -999) not in (None, -999) and rdr_tgt.alt < opt.min_alt_ft:
             continue
-        if rdr_tgt.age < 10:
+        if _target_is_fresh(rdr_tgt, now_ts):
             col = [round(20 * rdr_tgt.fade / 1000,0) + 37, round(190 * rdr_tgt.fade / 1000,0) + 37, round(20 * rdr_tgt.fade / 1000,0) + 37]
             sta_pos_x = rdr_tgt.pos_x + math.cos(rdr_tgt.ang * math.pi / 180) * 4 * rdr_tgt.sze / 2
             sta_pos_y = rdr_tgt.pos_y + math.sin(rdr_tgt.ang * math.pi / 180) * 4 * rdr_tgt.sze / 2
@@ -295,10 +321,11 @@ def AnalogDraw2(screen,rdr_tgts,dis_range,sweep_angle):
     col_mark = [205,205,205]
        
     #Handle Radar Targets
+    now_ts = time.time()
     for rdr_tgt in rdr_tgts.values():
         if getattr(opt, "min_alt_ft", 0) and getattr(rdr_tgt, "alt", -999) not in (None, -999) and rdr_tgt.alt < opt.min_alt_ft:
             continue
-        if rdr_tgt.age < 10:
+        if _target_is_fresh(rdr_tgt, now_ts):
             col = [round(20 * rdr_tgt.fade / 1000,0) + 37, round(190 * rdr_tgt.fade / 1000,0) + 37, round(20 * rdr_tgt.fade / 1000,0) + 37]
             sta_pos_x = rdr_tgt.pos_x + math.cos(rdr_tgt.ang * math.pi / 180) * 4 * rdr_tgt.sze / 2
             sta_pos_y = rdr_tgt.pos_y + math.sin(rdr_tgt.ang * math.pi / 180) * 4 * rdr_tgt.sze / 2
@@ -330,10 +357,11 @@ def AnalogDraw3(screen,rdr_tgts,dis_range,sweep_angle):
     col_mark = [205,205,205]
     
     #Handle Radar Targets
+    now_ts = time.time()
     for rdr_tgt in rdr_tgts.values():
         if getattr(opt, "min_alt_ft", 0) and getattr(rdr_tgt, "alt", -999) not in (None, -999) and rdr_tgt.alt < opt.min_alt_ft:
             continue
-        if rdr_tgt.age < 10:
+        if _target_is_fresh(rdr_tgt, now_ts):
             col = [round(20 * rdr_tgt.fade / 1000,0) + 37, round(190 * rdr_tgt.fade / 1000,0) + 37, round(20 * rdr_tgt.fade / 1000,0) + 37]
             pygame.draw.circle(screen,color=col,center=[rdr_tgt.pos_x, rdr_tgt.pos_y], radius=7)
         
@@ -364,11 +392,12 @@ def DigitalDraw(screen,rdr_tgts,dis_range,sweep_angle):
     DrawMarkings(screen,fonts,col_mark,dis_range)
     
     #Handle Radar Targets
+    now_ts = time.time()
     for rdr_tgt in rdr_tgts.values():  
         if getattr(opt, "min_alt_ft", 0) and getattr(rdr_tgt, "alt", -999) not in (None, -999) and rdr_tgt.alt < opt.min_alt_ft:
             continue
         #Draw new targets behind sweep bar      
-        if rdr_tgt.age < 10:
+        if _target_is_fresh(rdr_tgt, now_ts):
             col = getattr(opt, "plane_color", (97,118,237))
             pygame.draw.circle(screen,color=col,center=[rdr_tgt.pos_x, rdr_tgt.pos_y], radius=3)
             
@@ -382,7 +411,8 @@ def DigitalDraw(screen,rdr_tgts,dis_range,sweep_angle):
                     label_offset_y = 10
                 screen.blit(img, (rdr_tgt.pos_x - 20, rdr_tgt.pos_y + label_offset_y))
 
-    to_delete = [tgt.hex for tgt in rdr_tgts.values() if (sweep_angle > tgt.ang - 1 and sweep_angle < tgt.ang)]
+    # Keep contacts on screen between sweeps; only purge clearly stale contacts.
+    to_delete = [tgt.hex for tgt in rdr_tgts.values() if not _target_is_fresh(tgt, now_ts)]
     for id in to_delete:
         del rdr_tgts[id]
 
