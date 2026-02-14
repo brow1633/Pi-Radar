@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Radar Config</title>
+    <style>
+        body { font-family: sans-serif; max-width: 500px; margin: 20px auto; background: #f4f4f4; padding: 20px; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .row { margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
+        input[type="text"], input[type="number"] { padding: 5px; width: 60%; }
+        button { padding: 10px 20px; cursor: pointer; border: none; border-radius: 4px; }
+        .btn-save { background: #28a745; color: white; }
+        .btn-restart { background: #dc3545; color: white; width: 100%; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Radar Settings</h2>
+        <form action="/save" method="post">
+            {% for key, value in config.items() %}
+            <div class="row">
+                <label>{{ key }}</label>
+                {% if 'COLOR' in key %}
+                    {% set rgb = value.strip('()').split(',') %}
+                    <input type="color" name="{{ key }}" value="#{{ '%02x%02x%02x' | format(rgb[0]|int, rgb[1]|int, rgb[2]|int) }}">
+                {% else %}
+                    <input type="text" name="{{ key }}" value="{{ value }}">
+                {% endif %}
+            </div>
+            {% endfor %}
+            <button type="submit" class="btn-save">Save Config</button>
+        </form>
+
+        <form action="/restart" method="post">
+            <button type="submit" class="btn-restart">Restart Application (Kill & Launch)</button>
+        </form>
+    </div>
+</body>
+</html>

@@ -1,6 +1,7 @@
 import pygame
 import Classes
 import os
+import ast
 
 opts = Classes.Options()
 
@@ -110,6 +111,21 @@ def LoadOptions(path_mod,opts):
 
                         if "MIN_ALT_FT" in line:
                             opts.min_alt_ft = int(line.split("=")[1].strip())
+                        if "BACKGROUND_COLOR" in line:
+                            opts.background_color = ast.literal_eval(line.split("=")[1].strip())
+                        if "MARKINGS_COLOR" in line:
+                            opts.markings_color = ast.literal_eval(line.split("=")[1].strip())
+                        if "SCANBAR_COLOR" in line:
+                            opts.scanbar_color = ast.literal_eval(line.split("=")[1].strip())
+                        if "PLANE_COLOR" in line:
+                            opts.plane_color = ast.literal_eval(line.split("=")[1].strip())
+                        if "PLANE_TEXT_COLOR" in line:
+                            opts.plane_text_color = ast.literal_eval(line.split("=")[1].strip())
+                        if "RUNWAY_FILL_COLOR" in line:
+                            opts.runway_fill_color = ast.literal_eval(line.split("=")[1].strip())
+                        if "RUNWAY_BORDER_COLOR" in line:
+                            opts.runway_border_color = ast.literal_eval(line.split("=")[1].strip())
+
 
                 opts.config_ok = True
 
