@@ -18,6 +18,16 @@ _INFOBOX_BG_CACHE = {}
 _TEXT_CACHE = {}
 _TEXT_CACHE_MAX = 512
 
+TARGET_STALE_SEC = 60
+
+
+def _target_is_fresh(rdr_tgt):
+    """Return True when the target age is recent enough to draw."""
+    age = getattr(rdr_tgt, "age", None)
+    if age in (None, -999):
+        return True
+    return age <= TARGET_STALE_SEC
+
 
 def _render_text_cached(font, text: str, antialias: bool, color):
     key = (id(font), text, bool(antialias), tuple(color))
@@ -272,7 +282,7 @@ def AnalogDraw1(screen,rdr_tgts,dis_range,sweep_angle):
     for rdr_tgt in rdr_tgts.values():
         if getattr(opt, "min_alt_ft", 0) and getattr(rdr_tgt, "alt", -999) not in (None, -999) and rdr_tgt.alt < opt.min_alt_ft:
             continue
-        if rdr_tgt.age < 10:
+        if _target_is_fresh(rdr_tgt):
             col = [round(20 * rdr_tgt.fade / 1000,0) + 37, round(190 * rdr_tgt.fade / 1000,0) + 37, round(20 * rdr_tgt.fade / 1000,0) + 37]
             sta_pos_x = rdr_tgt.pos_x + math.cos(rdr_tgt.ang * math.pi / 180) * 4 * rdr_tgt.sze / 2
             sta_pos_y = rdr_tgt.pos_y + math.sin(rdr_tgt.ang * math.pi / 180) * 4 * rdr_tgt.sze / 2
@@ -298,7 +308,7 @@ def AnalogDraw2(screen,rdr_tgts,dis_range,sweep_angle):
     for rdr_tgt in rdr_tgts.values():
         if getattr(opt, "min_alt_ft", 0) and getattr(rdr_tgt, "alt", -999) not in (None, -999) and rdr_tgt.alt < opt.min_alt_ft:
             continue
-        if rdr_tgt.age < 10:
+        if _target_is_fresh(rdr_tgt):
             col = [round(20 * rdr_tgt.fade / 1000,0) + 37, round(190 * rdr_tgt.fade / 1000,0) + 37, round(20 * rdr_tgt.fade / 1000,0) + 37]
             sta_pos_x = rdr_tgt.pos_x + math.cos(rdr_tgt.ang * math.pi / 180) * 4 * rdr_tgt.sze / 2
             sta_pos_y = rdr_tgt.pos_y + math.sin(rdr_tgt.ang * math.pi / 180) * 4 * rdr_tgt.sze / 2
@@ -333,7 +343,7 @@ def AnalogDraw3(screen,rdr_tgts,dis_range,sweep_angle):
     for rdr_tgt in rdr_tgts.values():
         if getattr(opt, "min_alt_ft", 0) and getattr(rdr_tgt, "alt", -999) not in (None, -999) and rdr_tgt.alt < opt.min_alt_ft:
             continue
-        if rdr_tgt.age < 10:
+        if _target_is_fresh(rdr_tgt):
             col = [round(20 * rdr_tgt.fade / 1000,0) + 37, round(190 * rdr_tgt.fade / 1000,0) + 37, round(20 * rdr_tgt.fade / 1000,0) + 37]
             pygame.draw.circle(screen,color=col,center=[rdr_tgt.pos_x, rdr_tgt.pos_y], radius=7)
         
@@ -368,7 +378,7 @@ def DigitalDraw(screen,rdr_tgts,dis_range,sweep_angle):
         if getattr(opt, "min_alt_ft", 0) and getattr(rdr_tgt, "alt", -999) not in (None, -999) and rdr_tgt.alt < opt.min_alt_ft:
             continue
         #Draw new targets behind sweep bar      
-        if rdr_tgt.age < 10:
+        if _target_is_fresh(rdr_tgt):
             col = getattr(opt, "plane_color", (97,118,237))
             pygame.draw.circle(screen,color=col,center=[rdr_tgt.pos_x, rdr_tgt.pos_y], radius=3)
             
@@ -382,7 +392,8 @@ def DigitalDraw(screen,rdr_tgts,dis_range,sweep_angle):
                     label_offset_y = 10
                 screen.blit(img, (rdr_tgt.pos_x - 20, rdr_tgt.pos_y + label_offset_y))
 
-    to_delete = [tgt.hex for tgt in rdr_tgts.values() if (sweep_angle > tgt.ang - 1 and sweep_angle < tgt.ang)]
+    # Keep contacts on screen between sweeps; only purge clearly stale contacts.
+    to_delete = [tgt.hex for tgt in rdr_tgts.values() if not _target_is_fresh(tgt)]
     for id in to_delete:
         del rdr_tgts[id]
 
