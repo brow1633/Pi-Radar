@@ -60,6 +60,8 @@ rdr_tgts = {}
 data_lock = threading.Lock()
 raw_tgts = []
 raw_tgts_new = []
+fetch_thread = None
+fetch_in_progress = False
 
 fps = 0
 dwnl_stats = [1,0] #0 - Total Downloads, #1 - Errors
@@ -178,14 +180,29 @@ def DataProcessing():
     global raw_tgts_new
     global opts
     global dwnl_stats
+    global fetch_in_progress
     
-    if opts.config_ok:
-        raw_tgts_tmp = DataFetcher.fetchADSBData(opts.homePos,opts.url)
+    try:
+        if opts.config_ok:
+            raw_tgts_tmp = DataFetcher.fetchADSBData(opts.homePos,opts.url)
+            with data_lock:
+                raw_tgts_new = raw_tgts_tmp
+            dwnl_stats[0] += 1
+            if raw_tgts_new is None:
+                dwnl_stats[1] += 1
+    finally:
         with data_lock:
-            raw_tgts_new = raw_tgts_tmp
-        dwnl_stats[0] += 1
-        if raw_tgts_new is None:
-            dwnl_stats[1] += 1
+            fetch_in_progress = False
+
+def StartFetchThread():
+    global fetch_thread, fetch_in_progress
+    with data_lock:
+        if fetch_in_progress:
+            return
+        fetch_in_progress = True
+
+    fetch_thread = threading.Thread(target=task1, daemon=True)
+    fetch_thread.start()
 
 def DataDrawing():
     global raw_tgts, raw_tgts_new
@@ -309,18 +326,19 @@ def DataDrawing():
             b_key_minus_pressed = False
         
         sweep_angle += 0.9
-        if raw_tgts_new is None:
+        with data_lock:
+            needs_mid_sweep_fetch = raw_tgts_new is None and not fetch_in_progress
+
+        if needs_mid_sweep_fetch:
             if sweep_angle > 180 and sweep_angle < 180 + 40 * dt:
-                t3 = threading.Thread(target=task1)
-                t3.start()
+                StartFetchThread()
         
         if sweep_angle > 359:
             with data_lock:
                 raw_tgts = raw_tgts_new
                 raw_tgts_new = None
             sweep_angle = 0
-            t2 = threading.Thread(target=task1)
-            t2.start()
+            StartFetchThread()
 
         pygame.display.flip()
         dt = clock.tick(40) / 1000
@@ -329,13 +347,10 @@ def DataDrawing():
 def task1():
     DataProcessing()
 
-t1 = threading.Thread(target=task1)
-t1.start()
+StartFetchThread()
 
 DataDrawing()
 
 Menu.SaveOptions(path_mod,opts)
 pygame.quit()
-
-
 
