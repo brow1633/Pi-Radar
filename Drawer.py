@@ -117,6 +117,27 @@ def _polar_to_screen(screen, dis_nm: float, ang_deg: float, dis_range: float, co
     return x, y
 
 
+def _draw_plane_icon(screen, color, pos_x: float, pos_y: float, trk_deg: float):
+    """Draw a compact airplane-like icon pointing to track direction."""
+    if trk_deg in (None, -999):
+        trk_deg = 0
+    heading_rad = trk_deg * math.pi / 180.0
+
+    def _rot(local_x: float, local_y: float):
+        x = pos_x + (local_x * math.cos(heading_rad) + local_y * math.sin(heading_rad))
+        y = pos_y + (-local_x * math.sin(heading_rad) + local_y * math.cos(heading_rad))
+        return (x, y)
+
+    # Local coordinates are defined facing up (negative Y), then rotated by heading.
+    fuselage = [_rot(0, -9), _rot(2.2, 6), _rot(-2.2, 6)]
+    wings = [_rot(-8, -1), _rot(8, -1), _rot(6.5, 1.5), _rot(-6.5, 1.5)]
+    tail = [_rot(-4, 5), _rot(4, 5), _rot(2.5, 7.5), _rot(-2.5, 7.5)]
+
+    pygame.draw.polygon(screen, color, wings)
+    pygame.draw.polygon(screen, color, tail)
+    pygame.draw.polygon(screen, color, fuselage)
+
+
 def _build_runways_overlay_surface(screen, dis_range, opts, runways):
     # Fast overlay: colorkey surface (no per-pixel alpha) cached and blitted each frame.
     # This is significantly cheaper than blending a full-screen SRCALPHA surface.
@@ -427,12 +448,12 @@ def DigitalDraw(screen,rdr_tgts,dis_range,sweep_angle):
         #Draw new targets behind sweep bar      
         if _target_is_fresh(rdr_tgt, now_ts):
             col = getattr(opt, "plane_color", (97,118,237))
-            pygame.draw.circle(screen,color=col,center=[rdr_tgt.pos_x, rdr_tgt.pos_y], radius=3)
+            _draw_plane_icon(screen, col, rdr_tgt.pos_x, rdr_tgt.pos_y, rdr_tgt.trk)
             
             if rdr_tgt.spd > 0:
                 line_x = rdr_tgt.pos_x + math.sin(rdr_tgt.trk * math.pi / 180) *  rdr_tgt.spd * 100 / dis_range / 60 / 3
                 line_y = rdr_tgt.pos_y - math.cos(rdr_tgt.trk * math.pi / 180) *  rdr_tgt.spd * 100 / dis_range / 60 / 3
-                pygame.draw.line(screen,col,[rdr_tgt.pos_x, rdr_tgt.pos_y],[line_x, line_y], True)
+                pygame.draw.line(screen,col,[rdr_tgt.pos_x, rdr_tgt.pos_y],[line_x, line_y], 1)
                 img = _render_text_cached(fonts[0], rdr_tgt.cls, True, getattr(opt, "plane_text_color", (97,118,237)))
                 label_offset_y = -20
                 if rdr_tgt.trk >= 270 or rdr_tgt.trk <= 90:
