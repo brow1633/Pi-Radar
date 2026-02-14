@@ -37,6 +37,30 @@ def _target_is_fresh(rdr_tgt, now_ts=None):
     return age <= TARGET_STALE_SEC
 
 
+_PENDING_SWEEP_REMOVALS = {}
+
+
+def _sweep_is_over_target(sweep_angle, target_angle, window_deg=0.9):
+    """True when sweep is just past target angle (handles 359->0 wrap)."""
+    if target_angle is None:
+        return True
+    delta = (float(sweep_angle) - float(target_angle)) % 360.0
+    return 0.0 < delta <= float(window_deg)
+
+
+def _queue_sweep_removal(hex_id, target_angle):
+    if not hex_id:
+        return
+    _PENDING_SWEEP_REMOVALS[hex_id] = target_angle
+
+
+def _apply_pending_sweep_removals(rdr_tgts, sweep_angle):
+    for hex_id, target_angle in list(_PENDING_SWEEP_REMOVALS.items()):
+        if _sweep_is_over_target(sweep_angle, target_angle):
+            rdr_tgts.pop(hex_id, None)
+            _PENDING_SWEEP_REMOVALS.pop(hex_id, None)
+
+
 def _render_text_cached(font, text: str, antialias: bool, color):
     key = (id(font), text, bool(antialias), tuple(color))
     img = _TEXT_CACHE.get(key)
@@ -209,13 +233,12 @@ def Draw(mode,screen,raw_tgts,rdr_tgts,dis_range,sweep_angle,fonts_in,opts,selec
         for tgt in raw_tgts:
             # Filter low altitude targets early to reduce work.
             if min_alt_ft > 0 and getattr(tgt, "alt", -999) not in (None, -999) and tgt.alt < min_alt_ft:
-                # Remove any existing contact immediately when it falls below altitude filter.
-                rdr_tgts.pop(getattr(tgt, "hex", None), None)
+                _queue_sweep_removal(getattr(tgt, "hex", None), getattr(tgt, "ang", None))
                 continue
 
             in_visible_range = tgt.dis < dis_range * 5
             if not in_visible_range:
-                rdr_tgts.pop(getattr(tgt, "hex", None), None)
+                _queue_sweep_removal(getattr(tgt, "hex", None), getattr(tgt, "ang", None))
                 continue
 
             if (not tgt.drawn) and sweep_angle > tgt.ang and sweep_angle <= tgt.ang + 0.9:
@@ -247,10 +270,13 @@ def Draw(mode,screen,raw_tgts,rdr_tgts,dis_range,sweep_angle,fonts_in,opts,selec
                 rdr_tgt.sze = sze
 
                 rdr_tgts[rdr_tgt.hex] = rdr_tgt
+                _PENDING_SWEEP_REMOVALS.pop(rdr_tgt.hex, None)
             else:
                 remaining.append(tgt)
 
         raw_tgts[:] = remaining
+
+    _apply_pending_sweep_removals(rdr_tgts, sweep_angle)
 
     # Draw runways underneath the sweep/aircraft (cached for performance).
     DrawRunwaysOverlay(screen, dis_range, opts, runways_index)
@@ -413,10 +439,10 @@ def DigitalDraw(screen,rdr_tgts,dis_range,sweep_angle):
                     label_offset_y = 10
                 screen.blit(img, (rdr_tgt.pos_x - 20, rdr_tgt.pos_y + label_offset_y))
 
-    # Keep contacts on screen between sweeps; only purge clearly stale contacts.
-    to_delete = [tgt.hex for tgt in rdr_tgts.values() if not _target_is_fresh(tgt, now_ts)]
-    for id in to_delete:
-        del rdr_tgts[id]
+    # Queue stale contacts and remove them only when sweep passes their angle.
+    to_remove = [tgt for tgt in rdr_tgts.values() if not _target_is_fresh(tgt, now_ts)]
+    for tgt in to_remove:
+        _queue_sweep_removal(tgt.hex, getattr(tgt, "ang", None))
 
     #Draw Scan Bar
     line_x = screen.get_width() / 2 + math.sin(sweep_angle * math.pi / 180) * 500
