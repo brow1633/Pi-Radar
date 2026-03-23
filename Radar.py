@@ -325,7 +325,7 @@ def DataDrawing():
         else:
             b_key_minus_pressed = False
         
-        sweep_angle += 0.9
+        sweep_angle += 0.8
         with data_lock:
             needs_mid_sweep_fetch = raw_tgts_new is None and not fetch_in_progress
 
