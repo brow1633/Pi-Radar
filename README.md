@@ -1,6 +1,6 @@
 # Pi-Radar
 
-Pi-Radar is a Python project to display basic ADS-B information from the https://airplanes.live API or a local receiver on a Raspberry Pi similar to an analog radar scope.
+Pi-Radar is a Python project to display basic ADS-B information from the [adsb.lol](https://api.adsb.lol/) API or a local receiver on a Raspberry Pi similar to an analog radar scope.
 
 </br>
 
@@ -52,7 +52,7 @@ To install, follow these steps:
 
 8. Adjust the `radar.cfg` file:
 
-   - FEEDER_URL= must contain the path to your receiver's aircraft.json file
+   - FEEDER_URL= must contain the path to your receiver's aircraft.json file. Leave it blank to use the default `adsb.lol` online API.
 
    - LAT= and LNG= should be set to your desired radar location
 
@@ -77,7 +77,7 @@ To run, follow these steps:
 
 3. Adjust the radar.cfg file:
 
-   - FEEDER_URL= must contain the path to your receiver's aircraft.json file
+   - FEEDER_URL= must contain the path to your receiver's aircraft.json file. Leave it blank to use the default `adsb.lol` online API.
 
    - LAT= and LNG= should be set to your desired radar location
 

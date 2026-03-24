@@ -146,7 +146,7 @@ def SaveOptions(path_mod,opts):
 
                 if len(lines) > 0:
                     for i in range(0,len(lines)):
-                        if "api.airplanes.live" not in opts.url:
+                        if "api.adsb.lol" not in opts.url:
                             if "FEEDER_URL=" in lines[i]:
                                 lines[i] = "FEEDER_URL=" + opts.url + "\n"
 

@@ -15,6 +15,7 @@ _GRID_CACHE_KEY = None
 _GRID_CACHE_SURFACE = None
 
 _INFOBOX_BG_CACHE = {}
+_LOGO_SURFACE_CACHE = {}
 
 _TEXT_CACHE = {}
 _TEXT_CACHE_MAX = 512
@@ -107,6 +108,48 @@ def _get_infobox_bg_surface(box_w: int, box_h: int, box_alpha: int):
         s.fill((15, 15, 15, box_alpha))
         _INFOBOX_BG_CACHE[key] = s
     return s
+
+
+def _load_logo_surface(logo_path: str, max_size=(40, 40)):
+    if not logo_path:
+        return None
+
+    cache_key = (logo_path, int(max_size[0]), int(max_size[1]))
+    cached = _LOGO_SURFACE_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        img = pygame.image.load(logo_path).convert_alpha()
+        width, height = img.get_size()
+        if width <= 0 or height <= 0:
+            _LOGO_SURFACE_CACHE[cache_key] = None
+            return None
+
+        scale = min(max_size[0] / width, max_size[1] / height, 1)
+        new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
+        if new_size != (width, height):
+            img = pygame.transform.smoothscale(img, new_size)
+        _LOGO_SURFACE_CACHE[cache_key] = img
+        return img
+    except Exception:
+        _LOGO_SURFACE_CACHE[cache_key] = None
+        return None
+
+
+def _ellipsize_text(font, text, max_width):
+    if font.size(text)[0] <= max_width:
+        return text
+
+    ellipsis = "..."
+    if font.size(ellipsis)[0] > max_width:
+        return ""
+
+    for i in range(len(text), 0, -1):
+        candidate = text[:i].rstrip() + ellipsis
+        if font.size(candidate)[0] <= max_width:
+            return candidate
+    return ellipsis
 
 
 def _polar_to_screen(screen, dis_nm: float, ang_deg: float, dis_range: float, conv_fact: float):
@@ -250,10 +293,17 @@ def Draw(mode,screen,raw_tgts,rdr_tgts,dis_range,sweep_angle,fonts_in,opts,selec
                 rdr_tgt.dis = tgt.dis
                 rdr_tgt.spd = tgt.spd
                 rdr_tgt.alt = tgt.alt
+                rdr_tgt.lat = getattr(tgt, "lat", -999)
+                rdr_tgt.lng = getattr(tgt, "lng", -999)
                 rdr_tgt.age = tgt.time
                 rdr_tgt.cls = tgt.flt
                 rdr_tgt.type = tgt.type
                 rdr_tgt.hex = tgt.hex
+                rdr_tgt.route_label = getattr(tgt, "route_label", "")
+                rdr_tgt.airline_code = getattr(tgt, "airline_code", "")
+                rdr_tgt.logo_path = getattr(tgt, "logo_path", "")
+                rdr_tgt.detail_lookup_key = getattr(tgt, "detail_lookup_key", "")
+                rdr_tgt.details_requested = getattr(tgt, "details_requested", False)
                 rdr_tgt.last_seen_ts = time.time()
 
                 sze = 2
@@ -616,8 +666,8 @@ def DrawTrail(screen,dis_range,trail_points,opts):
 
 def DrawInfoBox(screen,fonts,selected_target,opts):
     # Draw small overlay with speed and altitude near the selected radar target.
-    box_w = 170
-    box_h = 88
+    box_w = 140
+    box_h = 90
     offset_x = 20
     offset_y = -80
 
@@ -637,9 +687,11 @@ def DrawInfoBox(screen,fonts,selected_target,opts):
     pygame.draw.rect(screen, [200,200,200], rect, width=1)
 
     callsign = selected_target.cls if selected_target.cls else "N/A"
+    route_label = getattr(selected_target, "route_label", "")
     alt_val = selected_target.alt if selected_target.alt is not None else -999
     spd_val = selected_target.spd if selected_target.spd is not None else -999
     type_val = selected_target.type
+    logo_surface = _load_logo_surface(getattr(selected_target, "logo_path", ""))
 
     alt_str = "ALT: N/A"
     spd_str = "SPD: N/A"
@@ -652,12 +704,32 @@ def DrawInfoBox(screen,fonts,selected_target,opts):
     if type_val != "":
         type_str = "TYPE: " + str(type_val)
 
-    img_callsign = _render_text_cached(fonts[1], callsign, True, [255,255,255])
+    callsign_max_w = box_w - 20
+    callsign_text = _ellipsize_text(fonts[1], callsign, callsign_max_w)
+    img_callsign = _render_text_cached(fonts[1], callsign_text, True, [255,255,255])
+
+    route_x = box_x + 10 + img_callsign.get_width() + 6
+    route_max_w = box_x + box_w - 10 - route_x
+    route_text = _ellipsize_text(fonts[0], route_label, max(0, route_max_w)) if route_label and route_max_w > 8 else ""
+    img_route = _render_text_cached(fonts[0], route_text, True, [150,190,255]) if route_text else None
     img_alt = _render_text_cached(fonts[0], alt_str, True, [200,200,200])
     img_spd = _render_text_cached(fonts[0], spd_str, True, [200,200,200])
     img_type = _render_text_cached(fonts[0], type_str, True, [200,200,200])
 
     screen.blit(img_callsign, (box_x + 10, box_y + 8))
-    screen.blit(img_alt, (box_x + 10, box_y + 32))
-    screen.blit(img_spd, (box_x + 10, box_y + 50))
-    screen.blit(img_type, (box_x + 10, box_y + 68))
+    if img_route is not None:
+        route_y = box_y + 11 + max(0, (img_callsign.get_height() - img_route.get_height()) // 2)
+        screen.blit(img_route, (route_x, route_y))
+    screen.blit(img_alt, (box_x + 10, box_y + 34))
+    screen.blit(img_spd, (box_x + 10, box_y + 52))
+    screen.blit(img_type, (box_x + 10, box_y + 70))
+
+    if logo_surface is not None:
+        badge_x = box_x + box_w - 56
+        badge_y = box_y + box_h - 57
+        badge_rect = pygame.Rect(badge_x, badge_y, 46, 46)
+        pygame.draw.rect(screen, [235,235,235], badge_rect, border_radius=6)
+        pygame.draw.rect(screen, [90,90,90], badge_rect, width=1, border_radius=6)
+        logo_x = badge_rect.x + (badge_rect.width - logo_surface.get_width()) // 2
+        logo_y = badge_rect.y + (badge_rect.height - logo_surface.get_height()) // 2
+        screen.blit(logo_surface, (logo_x, logo_y))

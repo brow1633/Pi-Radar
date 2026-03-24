@@ -16,6 +16,11 @@ class Aircraft:
     type = ""
     time = 0
     drawn = False
+    route_label = ""
+    airline_code = ""
+    logo_path = ""
+    detail_lookup_key = ""
+    details_requested = False
 
 class RadarTarget:
     dis = 0
@@ -29,8 +34,15 @@ class RadarTarget:
     sze = 0     #Size 1 - xs, 2 - s, 3 - m, 4 - l, 5 - xl
     pos_x = 0
     pos_y = 0
+    lat = -999
+    lng = -999
     type = ""
     hex = ""
+    route_label = ""
+    airline_code = ""
+    logo_path = ""
+    detail_lookup_key = ""
+    details_requested = False
 
 class HomePosition:
     lat = 0

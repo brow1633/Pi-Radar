@@ -11,6 +11,7 @@ import Drawer
 import Menu
 import threading
 import os
+from queue import Empty, Queue
 import Runways
 
 version = "0.2.0"
@@ -62,6 +63,10 @@ raw_tgts = []
 raw_tgts_new = []
 fetch_thread = None
 fetch_in_progress = False
+detail_thread = None
+detail_fetch_in_progress = set()
+detail_cache = {}
+detail_queue = Queue()
 
 fps = 0
 dwnl_stats = [1,0] #0 - Total Downloads, #1 - Errors
@@ -90,10 +95,14 @@ if opts.config_ok:
 else:
     threading.Thread(target=lambda: Runways.ensure_runways_csv(path_mod), daemon=True).start()
 
-#Use airplanes.live API if no url has been defined
+# Use adsb.lol API if no local URL has been defined.
 if len(opts.url) < 2:
-    opts.url = "https://api.airplanes.live/v2/point/" + str(opts.homePos.lat) + "/" + str(opts.homePos.lng) + "/250"
-    opts.source = "airplanes.live API"
+    opts.url = DataFetcher.PUBLIC_ADSB_LOL_URL_TEMPLATE.format(
+        lat=opts.homePos.lat,
+        lon=opts.homePos.lng,
+        radius=250,
+    )
+    opts.source = "adsb.lol API"
 else:
     opts.source = "Local URL: " + opts.url
 
@@ -194,6 +203,99 @@ def DataProcessing():
         with data_lock:
             fetch_in_progress = False
 
+
+def _detail_cache_key(tgt):
+    if tgt is None:
+        return ""
+    return (
+        getattr(tgt, "detail_lookup_key", "")
+        or getattr(tgt, "hex", "")
+        or DataFetcher.get_target_callsign(tgt)
+        or getattr(tgt, "reg", "")
+    )
+
+
+def QueueTargetDetails(tgt):
+    if tgt is None:
+        return
+
+    cache_key = _detail_cache_key(tgt)
+    tgt.detail_lookup_key = cache_key
+    if not cache_key:
+        return
+
+    cached = detail_cache.get(cache_key)
+    if cached is not None:
+        DataFetcher.apply_details_to_target(tgt, cached)
+        tgt.details_requested = True
+        return
+
+    if cache_key in detail_fetch_in_progress:
+        tgt.details_requested = True
+        return
+
+    callsign = DataFetcher.get_target_callsign(tgt)
+    if not callsign or getattr(tgt, "lat", -999) == -999 or getattr(tgt, "lng", -999) == -999:
+        return
+
+    tgt.details_requested = True
+    detail_fetch_in_progress.add(cache_key)
+    detail_queue.put(
+        {
+            "cache_key": cache_key,
+            "callsign": callsign,
+            "lat": tgt.lat,
+            "lon": tgt.lng,
+        }
+    )
+
+
+def SyncCachedDetails(targets):
+    if not targets:
+        return
+
+    targets_iter = targets.values() if isinstance(targets, dict) else targets
+    for tgt in list(targets_iter):
+        if tgt is None:
+            continue
+        cache_key = _detail_cache_key(tgt)
+        if not cache_key:
+            continue
+        cached = detail_cache.get(cache_key)
+        if cached is not None:
+            DataFetcher.apply_details_to_target(tgt, cached)
+
+
+def DetailWorker():
+    while run:
+        try:
+            job = detail_queue.get(timeout=0.25)
+        except Empty:
+            continue
+
+        cache_key = job.get("cache_key", "")
+        try:
+            detail_target = Classes.Aircraft()
+            detail_target.flt = job.get("callsign", "")
+            detail_target.lat = job.get("lat", -999)
+            detail_target.lng = job.get("lon", -999)
+            details = DataFetcher.fetch_route_details_for_target(detail_target)
+            detail_cache[cache_key] = details
+            with data_lock:
+                SyncCachedDetails(raw_tgts)
+                SyncCachedDetails(raw_tgts_new)
+                SyncCachedDetails(rdr_tgts)
+        except Exception as error:
+            print("Detail Fetch Error: ", error)
+            detail_cache[cache_key] = {
+                "route_label": "",
+                "airline_code": "",
+                "logo_path": "",
+            }
+        finally:
+            detail_fetch_in_progress.discard(cache_key)
+            detail_queue.task_done()
+
 def StartFetchThread():
     global fetch_thread, fetch_in_progress
     with data_lock:
@@ -203,6 +305,15 @@ def StartFetchThread():
 
     fetch_thread = threading.Thread(target=task1, daemon=True)
     fetch_thread.start()
+
+
+def StartDetailThread():
+    global detail_thread
+    if detail_thread is not None and detail_thread.is_alive():
+        return
+
+    detail_thread = threading.Thread(target=DetailWorker, daemon=True)
+    detail_thread.start()
 
 def DataDrawing():
     global raw_tgts, raw_tgts_new
@@ -283,11 +394,19 @@ def DataDrawing():
 
         if opts.config_ok:
             UpdateTrails(rdr_tgts)
+            with data_lock:
+                SyncCachedDetails(raw_tgts)
+                SyncCachedDetails(raw_tgts_new)
+                SyncCachedDetails(rdr_tgts)
             selected_trail = []
             selected_target = None
             if selected_hex is not None:
                 selected_target = rdr_tgts.get(selected_hex)
                 if selected_target is not None:
+                    QueueTargetDetails(selected_target)
+                    cached = detail_cache.get(_detail_cache_key(selected_target))
+                    if cached is not None:
+                        DataFetcher.apply_details_to_target(selected_target, cached)
                     selected_trail = list(trails.get(selected_hex, ()))
 
             with data_lock:
@@ -348,9 +467,9 @@ def task1():
     DataProcessing()
 
 StartFetchThread()
+StartDetailThread()
 
 DataDrawing()
 
 Menu.SaveOptions(path_mod,opts)
 pygame.quit()
-
